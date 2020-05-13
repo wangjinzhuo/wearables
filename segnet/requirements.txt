@@ -1,0 +1,8 @@
+torch
+torchvision
+numpy
+scipy
+pandas
+livelossplot
+seaborn
+sklearn
