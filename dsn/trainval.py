@@ -21,7 +21,7 @@ parser.add_argument("--resume", "-r", action="store_true", help="resume from che
 args = parser.parse_args()
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-best_acc = 0 # best test accuracy
+best_acc = 0 # best validation accuracy
 start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
 print("-------start data preparation----------")
@@ -32,7 +32,7 @@ start_time = time.time()
 if os.path.isfile('../dsn_data/ss'+str(ss_num)+'_train.pt') and os.path.isfile('../dsn_data/ss'+str(ss_num)+'_test.pt'):
     print('loader exist')
     trainloader = torch.load('../dsn_data/ss'+str(ss_num)+'_train.pt')
-    testloader = torch.load('../dsn_data/ss'+str(ss_num)+'_test.pt')
+    valloader = torch.load('../dsn_data/ss'+str(ss_num)+'_test.pt')
 else:
     print('loader dont exist')
     files = os.listdir(dataset_dir)
@@ -40,11 +40,11 @@ else:
     random.shuffle(l)
     s = math.ceil(len(files)*0.8)
     train_files = [files[i] for i in l[:s]]
-    test_files = [files[i] for i in l[s:]]
+    val_files = [files[i] for i in l[s:]]
     trainloader = make_dataloader(dataset_dir, train_files, batch_size=128, shuffle=True, num_workers=0)
-    testloader = make_dataloader(dataset_dir, test_files, batch_size=128, shuffle=True, num_workers=0)
+    valloader = make_dataloader(dataset_dir, val_files, batch_size=128, shuffle=True, num_workers=0)
     torch.save(trainloader, '../dsn_data/ss'+str(ss_num)+'_train.pt')
-    torch.save(testloader, '../dsn_data/ss'+str(ss_num)+'_test.pt')
+    torch.save(valloader, '../dsn_data/ss'+str(ss_num)+'_test.pt')
 print("-------%s seconds for data preparation----------" % (time.time() - start_time))
 
 print("building model...")
@@ -94,28 +94,28 @@ def train(epoch):
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
-# Testing
-def test(epoch):
+# Validation
+def val(epoch):
     print('val epoch: %d' % epoch)
     global best_acc
     net.eval()
-    test_loss = 0
+    val_loss = 0
     correct = 0
     total = 0
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(testloader):
+        for batch_idx, (inputs, targets) in enumerate(valloader):
             inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long) # RuntimeError: Expected object of scalar type Long but got scalar type Byte for argument #2 'target' in call to _thnn_nll_loss_forward
             outputs = net(inputs)
             targets = torch.max(targets, 1)[1] # solve issue "RuntimeError multi target not supported at /pytorch/.../ClassNLLCrit.."
             loss = criterion(outputs, targets)
 
-            test_loss += loss.item()
+            val_loss += loss.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-            progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
+            progress_bar(batch_idx, len(valloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                % (val_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
     # Save checkpoint.
     acc = 100.*correct/total
@@ -134,7 +134,7 @@ def test(epoch):
 
 for epoch in range(start_epoch, start_epoch+200):
     train(epoch)
-    test(epoch)
+    val(epoch)
     lr_scheduler.step()
 
 print("best acc: ", best_acc)
