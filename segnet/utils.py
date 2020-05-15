@@ -19,6 +19,21 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 
+def make_seq_loader(loader, seq_len, stride):
+    # input:  loader of size [#n, 1, #dim]
+    # reture: loader of size [#n, seq_len, #dim]
+
+    x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
+    xx, yy = [], []
+    idx    = gen_seq(x.shape[0], seq_len, stride)
+    for i in idx:
+        xx.append(x[i:i+seq_len, :, :])
+        yy.append(y[i:i+seq_len])
+    xx, yy = torch.cat(xx), torch.cat(yy)
+    dataset = TensorDataset(xx, yy)
+    loader  = DataLoader(dataset, batch_size=loader.batch_size)
+    return loader
+
 def gen_tr_val_test_dataloader(dataset_dir, split, seq_len=128, stride=32, batch_size=128, shuffle=True, num_workers=0):
     # split: a list with 3 elements like [0.6, 0.3, 0.1]
     # if l = 100, tr=[0:60], val=[61:90], te=[91:]

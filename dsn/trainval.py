@@ -25,10 +25,11 @@ best_acc = 0 # best validation accuracy
 start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
 print("-------start data preparation----------")
-ss_num = 3
-dataset_dir="/media/jinzhuo/wjz/Data/MASS/ss"+str(ss_num)+"/"
-start_time = time.time()
+ss_num = 4
 
+dataset_dir = '/media/jinzhuo/wjz/Data/MASS/ss4/'
+
+start_time = time.time()
 if os.path.isfile('../dsn_data/ss'+str(ss_num)+'_train.pt') and os.path.isfile('../dsn_data/ss'+str(ss_num)+'_test.pt'):
     print('loader exist')
     trainloader = torch.load('../dsn_data/ss'+str(ss_num)+'_train.pt')
@@ -45,6 +46,10 @@ else:
     valloader = make_dataloader(dataset_dir, val_files, batch_size=128, shuffle=True, num_workers=0)
     torch.save(trainloader, '../dsn_data/ss'+str(ss_num)+'_train.pt')
     torch.save(valloader, '../dsn_data/ss'+str(ss_num)+'_test.pt')
+'''
+trainloader = torch.load('../../dsn_data/fpz_cz_tr_loader.pt')
+valloader = torch.load('../../dsn_data/fpz_cz_val_loader.pt')
+'''
 print("-------%s seconds for data preparation----------" % (time.time() - start_time))
 
 print("building model...")
@@ -79,6 +84,7 @@ def train(epoch):
     total = 0
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long) # RuntimeError: Expected object of scalar type Long but got scalar type Byte for argument #2 'target' in call to _thnn_nll_loss_forward
+        print(inputs.size(), targets.size())
         optimizer.zero_grad()
         outputs = net(inputs)
         targets = torch.max(targets, 1)[1]
@@ -129,7 +135,7 @@ def val(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt.pth')
+        torch.save(state, './checkpoint/ckpt'+str(acc)+'.pth')
         best_acc = acc
 
 for epoch in range(start_epoch, start_epoch+200):

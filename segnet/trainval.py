@@ -68,8 +68,8 @@ class ParallBitLinear(nn.Module):
 def get_data_loader(dataset_dir, mod, batch_size, seq_len, data_feat_dim):
     train_loader = None
     val_loader = None
-    mass_set_num= 1
-    val_mass_set_num= 2
+    mass_set_num= 4
+    val_mass_set_num= 4
     if mod == 'bin':
         assert False
         train_bin = os.path.join(dataset_dir, '../data/bin_train_loader.pt')
