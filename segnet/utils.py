@@ -24,11 +24,10 @@ def make_seq_loader(loader, seq_len, stride):
     # reture: loader of size [#n, seq_len, #dim]
 
     x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
-    xx, yy = [], []
     idx    = gen_seq(x.shape[0], seq_len, stride)
-    for i in idx:
-        xx.append(x[i:i+seq_len, :, :])
-        yy.append(y[i:i+seq_len])
+    xx, yy = [x[i:i+seq_len, :, :] for i in idx], [y[i:i+seq_len, :, :] for i in idx]
+    xx     = [x.reshape(-1, x.shape[0]*x.shape[2]) for x in xx]
+    xx, yy = [x.unsqueeze(0) for x in xx], [y.unsqueeze(0) for y in yy]
     xx, yy = torch.cat(xx), torch.cat(yy)
     dataset = TensorDataset(xx, yy)
     loader  = DataLoader(dataset, batch_size=loader.batch_size)
@@ -75,7 +74,7 @@ def make_dataloader(dataset_dir, files, batch_size=128, shuffle=True, num_worker
 def gen_seq(n, seq_len, stride):
     res = []
     for i in range(0, n, stride):
-        if i + seq_len < n:
+        if i + seq_len <= n:
             res.append(i)
     return res
 
