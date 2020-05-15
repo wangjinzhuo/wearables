@@ -13,25 +13,13 @@ import argparse
 from model import *
 from utime import *
 
+from plot_cm import *
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-print("-------start data preparation----------")
-ss_num = 2
-dataset_dir='/media/jinzhuo/wjz/Data/MASS/ss'+str(ss_num)+'/'
-start_time = time.time()
+test_loader = torch.load('../data/mass/ss5_loader.pt')
+test_loader = make_seq_loader(test_loader, seq_len=35, stride=35)
 
-if os.path.isfile('../data/ss'+str(ss_num)+'_test_loader.pt'):
-    print('file exist')
-    test_loader = torch.load('../data/ss'+str(ss_num)+'_test_loader.pt')
-else:
-    print('file dont exist')
-    files = os.listdir(dataset_dir)
-    test_loader = make_seq_dataloader(dataset_dir, files, seq_len=35, stride=15, batch_size=32, shuffle=True, num_workers=0)
-    torch.save(test_loader, '../data/ss'+str(ss_num)+'_test_loader.pt')
-
-print("-------%s seconds for data preparation----------" % (time.time() - start_time))
-
-print("building model...")
 net = Utime()
 net = net.to(device)
 if device == "cuda":
@@ -43,13 +31,13 @@ print("resuming from best checkpoint")
 assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found"
 checkpoint = torch.load("./checkpoint/ckpt.pth")
 net.load_state_dict(checkpoint["net"])
-best_acc = checkpoint["acc"]
-print("best acc: ", best_acc)
+print("best acc: ", checkpoint["acc"])
 
 def test():
     net.eval()
     correct = 0
     total = 0
+    pred, gt = [], []
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(test_loader):
             print(batch_idx)
@@ -58,7 +46,13 @@ def test():
             predicted = outputs.max(1)[1]
             total += torch.numel(targets)
             correct += predicted.eq(targets).sum().item()
+            pred.append(predicted.cpu())
+            gt.append(targets.cpu())
     test_acc = correct/total
-    print(correct, '/', total, ': ', test_acc)
+    print("test acc: ", test_acc)
+    # draw cm
+    pred, gt = np.concatenate(pred), np.concatenate(gt)
+    pred, gt = pred.reshape(-1), gt.reshape(-1)
+    plot_confusion_matrix_from_data(gt, pred, [], True, 'Oranges', '.2f', 0.5, False, 2, 'y')
 
 test()

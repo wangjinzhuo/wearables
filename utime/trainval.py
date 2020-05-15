@@ -29,7 +29,6 @@ print("preparing train and validation dataloader ...")
 train_loader = torch.load('../data/mass/ss3_loader.pt')
 val_loader   = torch.load('../data/mass/ss2_loader.pt')
 
-print('middle ...')
 train_loader = make_seq_loader(train_loader, seq_len=35, stride=35)
 val_loader   = make_seq_loader(val_loader, seq_len=35, stride=35)
 print("finish preparing train and validation dataloader ...")
