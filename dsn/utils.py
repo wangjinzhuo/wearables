@@ -16,6 +16,24 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 
+def make_sleep_edf_dataloader(dataset_dir, batch_size):
+    files = os.listdir(dataset_dir)
+    x, y = [], []
+    for f in files:
+        df = np.load(os.path.join(dataset_dir, f))
+        data = df['x']
+        data = data.transpose(0,2,1)
+        label = df['y']
+        x.append(data)
+        y.append(label)
+
+    x, y = tuple(x), tuple(y)
+    x, y = np.concatenate(x), np.concatenate(y)
+    torch_x, torch_y = torch.from_numpy(x), torch.from_numpy(y)
+    dataset = TensorDataset(torch_x, torch_y)
+    dataloader = DataLoader(dataset, batch_size=batch_size)
+    return dataloader
+
 def make_dataloader(dataset_dir, files, batch_size=128, shuffle=True, num_workers=0):
     x, y = [], []
     for f in files:
