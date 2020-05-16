@@ -26,8 +26,8 @@ best_acc    = 0 # best val accuracy
 start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
 print("preparing train and validation dataloader ...")
-train_loader = torch.load('../data/mass/ss3_loader.pt')
-val_loader   = torch.load('../data/mass/ss2_loader.pt')
+train_loader = torch.load('../../data/mass/ss4_loader.pt')
+val_loader   = torch.load('../../data/mass/ss3_loader.pt')
 
 train_loader = make_seq_loader(train_loader, seq_len=35, stride=35)
 val_loader   = make_seq_loader(val_loader, seq_len=35, stride=35)
@@ -69,8 +69,8 @@ def gdl(pred, gt):
 #w = torch.tensor([6227/58600, 4724/58600, 29534/58600, 7651/58600, 10464/58600]).to(device)
 #criterion = nn.CrossEntropyLoss(w)
 #criterion = nn.CrossEntropyLoss()
-#optimizer = optim.SGD(net.parameters(), lr=1e-5, momentum=0.9, weight_decay=5e-4)
-optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
+optimizer = optim.SGD(net.parameters(), lr=1e-6, momentum=0.9, weight_decay=5e-4)
+#optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
 
 # Training
 def train(epoch):
@@ -140,7 +140,7 @@ def val(epoch):
         best_acc = acc
 
 lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
-for epoch in range(start_epoch, start_epoch+400):
+for epoch in range(start_epoch, start_epoch+600):
     train(epoch)
     val(epoch)
     lr_scheduler.step()

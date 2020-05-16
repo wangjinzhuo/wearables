@@ -10,14 +10,13 @@ import math
 import random
 import argparse
 
-from model import *
 from utime import *
-
+from utils import *
 from plot_cm import *
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-test_loader = torch.load('../data/mass/ss5_loader.pt')
+test_loader = torch.load('../../data/mass/ss4_loader.pt')
 test_loader = make_seq_loader(test_loader, seq_len=35, stride=35)
 
 net = Utime()
