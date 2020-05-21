@@ -12,35 +12,31 @@ import argparse
 import itertools
 
 from utils import *
-from utime import *
 from model import *
 
 def parse_cmd_args():
     parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument("--resume", "-r", action="store_true", help="resume from checkpoint")
-    parser.add_argument("--iter_num", default=2, help="step1 epoch number")
-    parser.add_argument("--step1_num", default=500, help="step1 epoch number")
-    parser.add_argument("--step2_num", default=500, help="step2 epoch number")
+    parser.add_argument("--resume",      action="store_true", help="resume from checkpoint")
+    parser.add_argument("--iter_num",    default=2,   help="step1 epoch number")
+    parser.add_argument("--step1_num",   default=2000, help="step1 epoch number")
+    parser.add_argument("--step2_num",   default=500, help="step2 epoch number")
+    parser.add_argument("--train_stage", default=12,  help="select train stage")
     args = parser.parse_args()
     return args
 
 args = parse_cmd_args()
-
-device      = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 step1_best_acc    = 0 # best step1 val accuracy
 step2_best_acc    = 0 # best step2 val accuracy
-
 step1_start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 step2_start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
 print("preparing train and validation dataloader ...")
-train_loader = torch.load('../data/mass/ss1_loader.pt')
-val_loader   = torch.load('../data/mass/ss2_loader.pt')
-
-train_loader = make_seq_loader(train_loader, seq_len=128, stride=128)
-val_loader   = make_seq_loader(val_loader, seq_len=128, stride=128)
-
+train_loader     = torch.load('../data/mass/ss1_loader.pt')
+val_loader       = torch.load('../data/mass/ss2_loader.pt')
+train_loader     = make_seq_loader(train_loader, seq_len=128, stride=128)
+val_loader       = make_seq_loader(val_loader, seq_len=128, stride=128)
 bin_train_loader = make_bin_loader(train_loader)
 bin_val_loader   = make_bin_loader(val_loader)
 
@@ -61,11 +57,11 @@ if args.resume:
     step1_start_epoch = checkpoint["epoch"]
     step1_best_acc    = checkpoint["acc"]
 
-    checkpoint = torch.load("./checkpoint/step2_bnet.pth")
-    step2_bnet.load_state_dict(checkpoint["net"])
-
     checkpoint = torch.load("./checkpoint/snet.pth")
     snet.load_state_dict(checkpoint["net"])
+
+    checkpoint = torch.load("./checkpoint/step2_bnet.pth")
+    step2_bnet.load_state_dict(checkpoint["net"])
 
     checkpoint = torch.load("./checkpoint/pnet.pth")
     pnet.load_state_dict(checkpoint["net"])
@@ -78,16 +74,13 @@ def step1_train(epoch):
     step1_bnet.train()
     snet.train()
 
-    train_loss = 0
-    correct    = 0
-    total      = 0
-
+    train_loss, correct, total = 0, 0, 0
     for batch_idx, (inputs, targets) in enumerate(bin_train_loader):
         inputs  = inputs.to(device, dtype=torch.float)
         targets = targets.to(device, dtype=torch.long)
         #print(inputs.size(), targets.size()) # bs, 1, dim*128;  bs, 128
-        if inputs.size(2) != 35*3000:
-            idx    = list(range(0,6000*35,2))
+        if inputs.size(2) != 128*3000:
+            idx    = list(range(0,6000*128,2))
             inputs = inputs[:,:,idx]
         step1_optimizer.zero_grad()
         bout = step1_bnet(inputs) # bs, seq_len, class_num
@@ -105,21 +98,18 @@ def step1_train(epoch):
 
 # step1 - validataion
 def step1_val(epoch):
-    print('Step 1: Val - Epoch: {}'.format(epoch))
+    print('Step 1: Valid - Epoch: {}'.format(epoch))
     global step1_best_acc
     step1_bnet.eval()
     snet.eval()
 
-    val_loss = 0
-    correct  = 0
-    total    = 0
-
+    val_loss, correct, total = 0, 0, 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(bin_val_loader):
             inputs  = inputs.to(device, dtype=torch.float)
             targets = targets.to(device, dtype=torch.long)
-            if inputs.size(2) != 35*3000:
-                idx    = list(range(0,6000*35,2))
+            if inputs.size(2) != 128*3000:
+                idx    = list(range(0,6000*128,2))
                 inputs = inputs[:,:,idx]
             bout = step1_bnet(inputs)
             sout = snet(bout)
@@ -156,19 +146,16 @@ def step1_val(epoch):
 def step2_train(epoch):
     print('Step 2: Train - Epoch: {}'.format(epoch))
     step2_bnet.train()
-    pnet.train()
     snet.eval()
+    pnet.train()
 
-    train_loss = 0
-    correct    = 0
-    total      = 0
-
+    train_loss, correct, total = 0, 0, 0
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         inputs  = inputs.to(device, dtype=torch.float)
         targets = targets.to(device, dtype=torch.long)
         #print(inputs.size(), targets.size()) # bs, 1, dim*128;  bs, 128
-        if inputs.size(2) != 35*3000:
-            idx    = list(range(0,6000*35,2))
+        if inputs.size(2) != 128*3000:
+            idx    = list(range(0,6000*128,2))
             inputs = inputs[:,:,idx]
         step2_optimizer.zero_grad()
 
@@ -190,22 +177,19 @@ def step2_train(epoch):
 
 # step2 - validataion
 def step2_val(epoch):
-    print('Step 2: Val - Epoch: {}'.format(epoch))
+    print('Step 2: Valid - Epoch: {}'.format(epoch))
     global step2_best_acc
     step2_bnet.eval()
-    pnet.eval()
     snet.eval()
+    pnet.eval()
 
-    val_loss = 0
-    correct  = 0
-    total    = 0
-
+    val_loss, correct, total = 0, 0, 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(val_loader):
             inputs  = inputs.to(device, dtype=torch.float)
             targets = targets.to(device, dtype=torch.long)
-            if inputs.size(2) != 35*3000:
-                idx    = list(range(0,6000*35,2))
+            if inputs.size(2) != 128*3000:
+                idx    = list(range(0,6000*128,2))
                 inputs = inputs[:,:,idx]
             bout  = step2_bnet(inputs)
             sout  = snet(bout)
@@ -240,28 +224,33 @@ def step2_val(epoch):
         step2_best_acc = acc
 
 #optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
-iter_num  = args.iter_num
-step1_num = args.step1_num
-step2_num = args.step2_num
+iter_num    = args.iter_num
+step1_num   = args.step1_num
+step2_num   = args.step2_num
+train_stage = args.train_stage
 
 for iter_ in range(iter_num):
+    print(iter_)
     # step1: bnet + snet
-    step1_optimizer = optim.SGD(itertools.chain(step1_bnet.parameters(), snet.parameters()), lr=1e-4, momentum=0.9, weight_decay=5e-4)
-    lr_scheduler    = optim.lr_scheduler.StepLR(step1_optimizer, step_size=50, gamma=0.5)
-    for epoch in range(step1_start_epoch, step1_start_epoch + step1_num):
-        step1_train(epoch)
-        step1_val(epoch)
-        lr_scheduler.step()
+    if '1' in str(train_stage):
+        print('stage 1 ...')
+        step1_optimizer = optim.SGD(itertools.chain(step1_bnet.parameters(), snet.parameters()), lr=1e-4, momentum=0.9, weight_decay=5e-4)
+        lr_scheduler    = optim.lr_scheduler.StepLR(step1_optimizer, step_size=50, gamma=0.5)
+        for epoch in range(step1_start_epoch, step1_start_epoch + step1_num):
+            step1_train(epoch)
+            step1_val(epoch)
+            lr_scheduler.step()
 
-    ckpt = torch.load('checkpoint/step1_bnet.pth')
-    step2_bnet.state_load(ckpt['net'])
+    if '2' in str(train_stage):
+        # step2: bnet + pnet -- keep snet's params fixed
+        print('stage 2 ...')
+        step2_bnet = step1_bnet
 
-    # step2: bnet + pnet -- keep snet's params fixed
-    step2_optimizer = optim.SGD(itertools.chain(step2_bnet.parameters(), pnet.parameters()), lr=1e-4, momentum=0.9, weight_decay=5e-4)
-    lr_scheduler    = optim.lr_scheduler.StepLR(step2_optimizer, step_size=50, gamma=0.5)
-    for epoch in range(step2_start_epoch, step2_start_epoch + step2_num):
-        step2_train(epoch)
-        step2_val(epoch)
-        lr_scheduler.step()
+        step2_optimizer = optim.SGD(itertools.chain(step2_bnet.parameters(), pnet.parameters()), lr=1e-5, momentum=0.9, weight_decay=5e-4)
+        lr_scheduler    = optim.lr_scheduler.StepLR(step2_optimizer, step_size=50, gamma=0.5)
+        for epoch in range(step2_start_epoch, step2_start_epoch + step2_num):
+            step2_train(epoch)
+            step2_val(epoch)
+            lr_scheduler.step()
 
     iter_ += 1
