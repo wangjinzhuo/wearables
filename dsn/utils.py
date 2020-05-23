@@ -16,6 +16,17 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 
+def combine_loader(loader_list):
+    xlist, ylist = [], []
+    for loader in loader_list:
+        x, y = loader.dataset.tensors[0], loader.dataset.tensors[1]
+        xlist.append(x), ylist.append(y)
+    x, y    = torch.cat(xlist, 0), torch.cat(ylist, 0)
+    dataset = TensorDataset(x, y)
+    loader  = DataLoader(dataset, batch_size=loader_list[0].batch_size)
+
+    return loader
+
 def make_sleep_edf_dataloader(dataset_dir, batch_size):
     files = os.listdir(dataset_dir)
     x, y = [], []
@@ -34,11 +45,12 @@ def make_sleep_edf_dataloader(dataset_dir, batch_size):
     dataloader = DataLoader(dataset, batch_size=batch_size)
     return dataloader
 
-def make_dataloader(dataset_dir, files, batch_size=128, shuffle=True, num_workers=0):
+def make_dataloader(dataset_dir, files, channel, batch_size, shuffle):
     x, y = [], []
     for f in files:
-        mat = loadmat(dataset_dir + f)
-        data = mat['data'][:,:,1]
+        matf = os.path.join(dataset_dir, f)
+        mat  = loadmat(matf)
+        data = mat['data'][:,:,channel]
         data = data.reshape(data.shape[0], 1, data.shape[1])
         #print(data.shape)
         label = mat['labels']
@@ -48,7 +60,7 @@ def make_dataloader(dataset_dir, files, batch_size=128, shuffle=True, num_worker
     x, y = np.vstack(x), np.vstack(y)
     torch_x, torch_y = torch.from_numpy(x), torch.from_numpy(y)
     dataset = TensorDataset(torch_x, torch_y)
-    dataloader = DataLoader(dataset, batch_size=128, shuffle=True, num_workers=0)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
     return dataloader
 
 def get_mean_and_std(dataset):

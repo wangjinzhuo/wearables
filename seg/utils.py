@@ -22,18 +22,16 @@ import torch.nn.functional as F
 
 def gdl(pred, gt, class_num):
     # generalized dice loss
-    # pred: bs, class_num, seq_len
+    # pred: bs, seq_len, class_num
     # gt  : bs, seq_len
     onehot_y = F.one_hot(gt.long(), class_num)
-    #pred_    = pred.permute(0, 2, 1)
-    pred_ = pred
 
-    intersection = torch.sum(onehot_y * pred_)
-    union        = torch.sum(onehot_y + pred_)
+    intersection = torch.sum(onehot_y * pred)
+    union        = torch.sum(onehot_y + pred)
     loss         = 1 - 2 * intersection / (union * class_num)
 
-    predl = torch.argmax(pred, dim=2)
-    corr  = torch.sum(torch.eq(predl.long(), gt.long()))
+    pred = torch.argmax(pred, dim=2)
+    corr  = torch.sum(torch.eq(pred.long(), gt.long())).item()
     total = torch.numel(gt)
 
     return loss, corr, total
@@ -61,8 +59,8 @@ def convert_class_to_bin(y):
     return ans
 
 def make_seq_loader(loader, seq_len, stride):
-    # input:  loader of size [#n, 1, #dim], [#n]
-    # reture: loader of size [#n, seq_len, #dim], [#n]
+    # input : loader of size [#n, 1, #dim], [#n]
+    # return: loader of size [#n, seq_len, #dim], [#n]
 
     x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
     idx    = gen_seq(x.shape[0], seq_len, stride)

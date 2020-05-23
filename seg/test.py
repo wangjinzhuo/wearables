@@ -15,17 +15,8 @@ from utils import *
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def parse_cmd_args():
-    parser = argparse.ArgumentParser(description='ss_num')
-    parser.add_argument('--ss_num',default='1',help='ss number')
-    args = parser.parse_args()
-    return args
-
-args = parse_cmd_args()
-ss_num = args.ss_num
-
-test_loader = torch.load('../data/mass/ss'+str(ss_num)+'_loader.pt')
-seq_test_loader = make_seq_loader(test_loader, 128, 64)
+test_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ss_3.pt')
+seq_test_loader = make_seq_loader(test_loader, seq_len=128, stride=64)
 bin_test_loader = make_bin_loader(seq_test_loader)
 
 step1_bnet, step2_bnet, snet, pnet = Bnet(), Bnet(), Snet(), Pnet()

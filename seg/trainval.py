@@ -18,7 +18,7 @@ def parse_cmd_args():
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument("--resume",      action="store_true", help="resume from checkpoint")
     parser.add_argument("--iter_num",    default=2,   help="step1 epoch number")
-    parser.add_argument("--step1_num",   default=2000, help="step1 epoch number")
+    parser.add_argument("--step1_num",   default=500, help="step1 epoch number")
     parser.add_argument("--step2_num",   default=500, help="step2 epoch number")
     parser.add_argument("--train_stage", default=12,  help="select train stage")
     args = parser.parse_args()
@@ -33,10 +33,10 @@ step1_start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 step2_start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
 print("preparing train and validation dataloader ...")
-train_loader     = torch.load('../data/mass/ss1_loader.pt')
-val_loader       = torch.load('../data/mass/ss2_loader.pt')
-train_loader     = make_seq_loader(train_loader, seq_len=128, stride=128)
-val_loader       = make_seq_loader(val_loader, seq_len=128, stride=128)
+train_loader     = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_1.pt')
+val_loader       = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
+train_loader     = make_seq_loader(train_loader, seq_len=128, stride=64)
+val_loader       = make_seq_loader(val_loader, seq_len=128, stride=64)
 bin_train_loader = make_bin_loader(train_loader)
 bin_val_loader   = make_bin_loader(val_loader)
 
@@ -60,8 +60,10 @@ if args.resume:
     checkpoint = torch.load("./checkpoint/snet.pth")
     snet.load_state_dict(checkpoint["net"])
 
+    '''
     checkpoint = torch.load("./checkpoint/step2_bnet.pth")
     step2_bnet.load_state_dict(checkpoint["net"])
+    '''
 
     checkpoint = torch.load("./checkpoint/pnet.pth")
     pnet.load_state_dict(checkpoint["net"])
@@ -91,7 +93,7 @@ def step1_train(epoch):
         step1_optimizer.step()
 
         train_loss += loss.item()
-        correct    += correct_batch.item()
+        correct    += correct_batch
         total      += total_batch
         progress_bar(batch_idx, len(bin_train_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                          % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
@@ -113,9 +115,10 @@ def step1_val(epoch):
                 inputs = inputs[:,:,idx]
             bout = step1_bnet(inputs)
             sout = snet(bout)
+
             loss, correct_batch, total_batch = gdl(sout, targets, sout.size(2))
 
-            correct  += correct_batch.item()
+            correct  += correct_batch
             total    += total_batch
             val_loss += loss.item()
             progress_bar(batch_idx, len(bin_val_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
@@ -161,6 +164,17 @@ def step2_train(epoch):
 
         bout  = step2_bnet(inputs) # bs, ch, dim
         sout  = snet(bout)   # bs, seq_len, 2
+
+        # evaluate snet
+        slist = []
+        for i in range(targets.size(0)):
+            slist.append(convert_class_to_bin(targets[i]))
+        starget = torch.cat([x.unsqueeze(0) for x in slist])
+        starget = starget.to(device, dtype=torch.long)
+        sloss, scorr, stotal = gdl(sout, starget, sout.size(2))
+        print('snet acc: {}'.format(scorr/stotal))
+        # finish
+
         bsout = torch.max(sout, dim=2)[1] # binary segment vector: bs, seq_len
         pin   = seg_pool(bout, bsout) # bs, ch, dim(1/16)
         pout  = pnet(pin) # bs, seq_len, 5
@@ -170,7 +184,7 @@ def step2_train(epoch):
         step2_optimizer.step()
 
         train_loss += loss.item()
-        correct    += correct_batch.item()
+        correct    += correct_batch
         total      += total_batch
         progress_bar(batch_idx, len(train_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                          % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
@@ -193,12 +207,23 @@ def step2_val(epoch):
                 inputs = inputs[:,:,idx]
             bout  = step2_bnet(inputs)
             sout  = snet(bout)
+
+            # evaluate snet
+            slist = []
+            for i in range(targets.size(0)):
+                slist.append(convert_class_to_bin(targets[i]))
+            starget = torch.cat([x.unsqueeze(0) for x in slist])
+            starget = starget.to(device, dtype=torch.long)
+            sloss, scorr, stotal = gdl(sout, starget, sout.size(2))
+            print('snet acc: {}'.format(scorr/stotal))
+            # finish
+
             bsout = torch.max(sout, dim=2)[1]
             pin   = seg_pool(bout, bsout)
             pout  = pnet(pin)
             loss, correct_batch, total_batch = gdl(pout, targets, pout.size(2))
 
-            correct  += correct_batch.item()
+            correct  += correct_batch
             total    += total_batch
             val_loss += loss.item()
             progress_bar(batch_idx, len(val_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
@@ -209,12 +234,14 @@ def step2_val(epoch):
     if acc > step2_best_acc:
         print('Saving step2_bnet, pnet ...')
         print(acc)
+        '''
         b_state = {
             'net': step2_bnet.state_dict(),
             'acc': acc,
             'epoch': epoch,
         }
         torch.save(b_state, './checkpoint/step2_bnet.pth')
+        '''
         p_state = {
             'net': pnet.state_dict(),
             'acc': acc,
@@ -246,7 +273,8 @@ for iter_ in range(iter_num):
         print('stage 2 ...')
         step2_bnet = step1_bnet
 
-        step2_optimizer = optim.SGD(itertools.chain(step2_bnet.parameters(), pnet.parameters()), lr=1e-5, momentum=0.9, weight_decay=5e-4)
+        #step2_optimizer = optim.SGD(itertools.chain(step2_bnet.parameters(), pnet.parameters()), lr=1e-5, momentum=0.9, weight_decay=5e-4)
+        step2_optimizer = optim.SGD(pnet.parameters(), lr=1e-5, momentum=0.9, weight_decay=5e-4)
         lr_scheduler    = optim.lr_scheduler.StepLR(step2_optimizer, step_size=50, gamma=0.5)
         for epoch in range(step2_start_epoch, step2_start_epoch + step2_num):
             step2_train(epoch)

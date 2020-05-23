@@ -50,9 +50,12 @@ class Pnet(nn.Module):
     def __init__(self):
         super(Pnet, self).__init__()
         self.features = nn.Sequential(
+            nn.Conv1d(256, 128, 4),
             nn.Flatten(),
-            nn.Linear(4096, 1024),
-            nn.Linear(1024, 128)
+            nn.Linear(1664, 512),
+            nn.Linear(512, 128),
+            #nn.Linear(4096, 1024),
+            #nn.Linear(1024, 128)
         )
         self.cls = Parabit(128, 5)
     def forward(self, x):
@@ -101,7 +104,8 @@ if __name__ == '__main__':
 
     pnet = Pnet()
     bseg = torch.max(sout, dim=2)[1]
-    pin  = seg_pool(bout, bseg)
+    pin  = seg_pool(bout, bseg) # bs, 256, 16
     pout = pnet(pin)
 
     print('bout: {}\nsout: {}\npout: {}'.format(bout.shape, sout.shape, pout.shape))
+    print('params of pnet: {}'.format(sum(torch.numel(p) for p in pnet.parameters())))
