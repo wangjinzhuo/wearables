@@ -26,8 +26,8 @@ best_acc    = 0 # best val accuracy
 start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
 print("preparing train and validation dataloader ...")
-train_loader = torch.load('../data/mass/ss1_loader.pt')
-val_loader   = torch.load('../data/mass/ss5_loader.pt')
+train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_1.pt')
+val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
 
 print('middle ...')
 train_loader = make_seq_loader(train_loader, seq_len=35, stride=35)
@@ -66,10 +66,6 @@ def gdl(pred, gt):
     total   = torch.numel(gt)
     return loss, correct, total
 
-
-#w = torch.tensor([6227/58600, 4724/58600, 29534/58600, 7651/58600, 10464/58600]).to(device)
-#criterion = nn.CrossEntropyLoss(w)
-#criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
 #optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
 

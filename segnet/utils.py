@@ -18,14 +18,53 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+import torch.nn.functional as F
+
+def gdl(pred, gt, class_num):
+    # generalized dice loss
+    # pred: bs, seq_len, class_num
+    # gt  : bs, seq_len
+    onehot_y = F.one_hot(gt.long(), class_num)
+
+    intersection = torch.sum(onehot_y * pred)
+    union        = torch.sum(onehot_y + pred)
+    loss         = 1 - 2 * intersection / (union * class_num)
+
+    pred = torch.argmax(pred, dim=2)
+    corr  = torch.sum(torch.eq(pred.long(), gt.long())).item()
+    total = torch.numel(gt)
+
+    return loss, corr, total
+
+def make_bin_loader(loader):
+    x, y = loader.dataset.tensors[0], loader.dataset.tensors[1]
+    if torch.numel(y) == y.size(0):
+        bin_y = convert_class_to_bin(y)
+    else:
+        bin_y = [convert_class_to_bin(y[yy]) for yy in range(y.size(0))]
+        bin_y = [yy.unsqueeze(0) for yy in bin_y]
+        bin_y = torch.cat(bin_y)
+    dataset = TensorDataset(x, bin_y)
+    bin_loader = DataLoader(dataset, batch_size=loader.batch_size)
+    return bin_loader
+
+def convert_class_to_bin(y):
+    ans    = torch.rand(y.size(0))
+    ans[0] = 0
+    for i in range(1, y.size(0)):
+        if y[i] == y[i-1]:
+            ans[i] = 0
+        else:
+            ans[i] = 1
+    return ans
 
 def make_seq_loader(loader, seq_len, stride):
-    # input:  loader of size [#n, 1, #dim]
-    # reture: loader of size [#n, seq_len, #dim]
+    # input : loader of size [#n, 1, #dim], [#n]
+    # return: loader of size [#n, seq_len, #dim], [#n]
 
     x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
     idx    = gen_seq(x.shape[0], seq_len, stride)
-    xx, yy = [x[i:i+seq_len, :, :] for i in idx], [y[i:i+seq_len, :, :] for i in idx]
+    xx, yy = [x[i:i+seq_len, :, :] for i in idx], [y[i:i+seq_len] for i in idx]
     xx     = [x.reshape(-1, x.shape[0]*x.shape[2]) for x in xx]
     xx, yy = [x.unsqueeze(0) for x in xx], [y.unsqueeze(0) for y in yy]
     xx, yy = torch.cat(xx), torch.cat(yy)
@@ -33,166 +72,12 @@ def make_seq_loader(loader, seq_len, stride):
     loader  = DataLoader(dataset, batch_size=loader.batch_size)
     return loader
 
-def gen_tr_val_test_dataloader(dataset_dir, split, seq_len=128, stride=32, batch_size=128, shuffle=True, num_workers=0):
-    # split: a list with 3 elements like [0.6, 0.3, 0.1]
-    # if l = 100, tr=[0:60], val=[61:90], te=[91:]
-    tr_files, val_files, te_files = [], [], []
-    for r, d, f in os.walk(dataset_dir):
-        n = len(f)
-        l = list(range(n))
-        random.shuffle(l)
-        s1 = math.ceil(n*split[0])
-        s2 = math.floor(n - n*split[2])
-        tr_files = [f[i] for i in l[:s1]]
-        val_files = [f[i] for i in l[s1+1:s2]]
-        te_files = [f[i] for i in l[s2+1:]]
-
-    print(tr_files, val_files, te_files)
-    tr, bin_tr = make_seq_dataloader(dataset_dir, tr_files, seq_len=128, stride=32, batch_size=128, shuffle=True, num_workers=0)
-    val, bin_val = make_seq_dataloader(dataset_dir, val_files, seq_len=128, stride=32, batch_size=128, shuffle=True, num_workers=0)
-    te, bin_te = make_seq_dataloader(dataset_dir, te_files, seq_len=128, stride=32, batch_size=128, shuffle=True, num_workers=0)
-    return bin_tr, bin_val, bin_te, tr, val, te
-
-# generate train - validation - test
-def make_dataloader(dataset_dir, files, batch_size=128, shuffle=True, num_workers=0):
-    x, y = [], []
-    for f in files:
-        mat = loadmat(dataset_dir + f)
-        data = mat['data'][:,:,1]
-        data = data.reshape(data.shape[0], 1, data.shape[1])
-        #print(data.shape)
-        label = mat['labels']
-        x.append(data)
-        y.append(label)
-    x, y = tuple(x), tuple(y)
-    x, y = np.vstack(x), np.vstack(y)
-    torch_x, torch_y = torch.from_numpy(x), torch.from_numpy(y)
-    dataset = TensorDataset(torch_x, torch_y)
-    dataloader = DataLoader(dataset, batch_size=128, shuffle=True, num_workers=0)
-    return dataloader
-
 def gen_seq(n, seq_len, stride):
     res = []
     for i in range(0, n, stride):
         if i + seq_len <= n:
             res.append(i)
     return res
-
-def convert_y_to_biny(y):
-    ret = []
-    for i in range(y.size()[0]):
-        tensor = y[i]
-        bin_ = []
-        for j in range(tensor.size()[0]):
-            if (tensor[j]==1).nonzero().item() == (tensor[j-1]==1).nonzero().item():
-                bin_.append(0)
-            else:
-                bin_.append(1)
-        bin_[0] = 0
-        ret.append(bin_)
-    # convert ret from list to torch.tensor
-    ans = torch.rand(y.size()[0], y.size()[1])
-    for i in range(y.size()[0]):
-        for j in range(y.size()[1]):
-            ans[i][j] = ret[i][j]
-    return ans
-
-class SleepDataset(Dataset):
-    r"""Dataset wrapping tensors.
-    Arguments:
-        *tensors (Tensor): tensors that have the same size of the first dimension.
-    """
-
-    def __init__(self, feat, label, seq_len, feat_channel, data_feat_dim):
-        assert len(feat) == len(label)
-        self.feat = feat
-        self.label = label
-        self.seq_len = seq_len
-        self.num_examples = (len(feat) - 1) // seq_len
-        self.feat_channel = feat_channel
-        self.example_indices = list(range(self.num_examples))
-        self.data_feat_dim = data_feat_dim
-
-    def __getitem__(self, index):
-        start_idx = self.example_indices[index] * self.seq_len
-        feat = self.feat[start_idx : start_idx+self.seq_len]
-        if feat.shape[1] != self.data_feat_dim:
-            if feat.shape[1] > self.data_feat_dim: # sample 6000 -> 3000
-                sample_idx = [2*idx for idx in range(self.data_feat_dim)]
-                feat = feat[:, sample_idx, :]
-            else:
-                assert False
-        label = self.label[start_idx : start_idx+self.seq_len]
-        torch_feat = torch.from_numpy(feat).reshape(self.feat_channel, self.seq_len*self.data_feat_dim)
-        return (torch_feat, torch.from_numpy(label))
-
-    def __len__(self):
-        return self.num_examples
-
-
-def make_feat_seq_loader(dataset_dir, batch_size, seq_len, data_feat_dim, feat_idx_list=[0], shuffle=True, num_workers=0):
-    mat_files = os.listdir(dataset_dir)
-
-    mat_list = []
-    for f in mat_files:
-        print("=== load ",f)
-        if not f.endswith(".mat"):
-            continue
-        mat = loadmat(os.path.join(dataset_dir, f))
-        mat_list.append(mat)
-
-    corpus_feat = [mat['data'][:,:,feat_idx_list] for mat in mat_list]
-    corpus_feat = np.concatenate(corpus_feat, axis=0)
-    corpus_label = [np.argmax(mat['labels'], axis=1) for mat in mat_list]
-    corpus_label = np.concatenate(corpus_label, axis=0)
-
-    dataset = SleepDataset(corpus_feat, corpus_label, seq_len, len(feat_idx_list), data_feat_dim)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-    return dataloader
-
-
-def make_seq_dataloader(dataset_dir, files, seq_len=128, stride=32, batch_size=128, shuffle=True, num_workers=0):
-    # x: [#n, 128, #dim]   y: [#n, 128]
-    x, y = [], []
-    for f in files:
-        mat = loadmat(dataset_dir + f)
-        data = mat['data'][:,:,0]
-        idx = gen_seq(data.shape[0], seq_len, stride)
-        label = mat['labels']
-        for i in idx:
-            x.append(data[i:i+seq_len,:])
-            y.append(label[i:i+seq_len, :])
-    numpy_x = np.random.rand(len(x), x[0].shape[0], x[0].shape[1])
-    numpy_y = np.random.rand(len(y), y[0].shape[0], y[0].shape[1])
-    for i in range(len(x)):
-        numpy_x[i, :, :] = x[i]
-    for i in range(len(y)):
-        numpy_y[i, :, :] = y[i]
-    torch_x, torch_y = torch.from_numpy(numpy_x), torch.from_numpy(numpy_y)
-
-    # calculate binary y
-    bin_torch_y = convert_y_to_biny(torch_y)
-    bin_dataset = TensorDataset(torch_x, bin_torch_y)
-    bin_dataloader = DataLoader(bin_dataset, batch_size=128, shuffle=True, num_workers=0)
-
-    dataset = TensorDataset(torch_x, torch_y)
-    dataloader = DataLoader(dataset, batch_size=128, shuffle=True, num_workers=0)
-    #return dataloader
-    return dataloader, bin_dataloader
-
-def dice_loss(pred, target):
-    smooth = 1.
-
-    # have to use contiguous since they may from a torch.view op
-    iflat = pred.contiguous().view(-1)
-    tflat = target.contiguous().view(-1)
-    intersection = (iflat * tflat).sum()
-
-    A_sum = torch.sum(tflat * iflat)
-    B_sum = torch.sum(tflat * tflat)
-
-    return 1 - ((2. * intersection + smooth) / (A_sum + B_sum + smooth) )
-
 
 def get_mean_and_std(dataset):
     '''Compute the mean and std value of dataset.'''

@@ -10,72 +10,83 @@ import math
 import random
 import argparse
 
-from utime import *
-from utils import *
-from plot_cm import *
+from model import *
+from segnet import *
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def parse_cmd_args():
-    parser = argparse.ArgumentParser(description="test set")
-    parser.add_argument("--test_set", default='5', help="choose a set to test, from 1-5")
-    args = parser.parse_args()
-    return args
+test_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ss_3.pt')
+seq_test_loader = make_seq_loader(test_loader, seq_len=128, stride=64)
+bin_test_loader = make_bin_loader(seq_test_loader)
 
-args = parse_cmd_args()
-test_set = args.test_set
+step1_bnet, step2_bnet, snet, pnet = Bnet(), Bnet(), Snet(), Pnet()
+step1_bnet, step2_bnet, snet, pnet = step1_bnet.to(device), step2_bnet.to(device), snet.to(device), pnet.to(device)
 
-print("building model...")
-net = Utime()
-net = net.to(device)
-'''
 if device == "cuda":
-    net = nn.DataParallel(net)
+    step1_bnet, step2_bnet, snet, pnet = nn.DataParallel(step1_bnet), nn.DataParallel(step2_bnet), nn.DataParallel(snet), nn.DataParallel(pnet),
     cudnn.benchmark = True
-'''
 
 # load checkpoint
 print("resuming from best checkpoint")
 assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found"
-checkpoint = torch.load("checkpoint/ckpt.pth")
-net.load_state_dict(checkpoint['net'])
-best_acc = checkpoint['acc']
-print("best acc: ", best_acc)
+checkpoint = torch.load("./checkpoint/step1_bnet.pth")
+step1_bnet.load_state_dict(checkpoint["net"])
 
-print("-------start data preparation----------")
-start_time = time.time()
+print(checkpoint['acc'])
 
-if os.path.isfile('../data/ss'+str(test_set)+'_loader.pt'):
-    print('test_set ss'+str(test_set)+' loader file exist')
-    test_loader = torch.load('../data/ss'+str(test_set)+'_loader.pt')
-else:
-    print('test_set ss'+str(test_set)+' loader file dont exist')
-    test_loader = make_feat_seq_loader(dataset_dir+'ss'+str(args.test_set), 32, 35, 3000)
-    torch.save(test_loader, '../data/ss'+str(test_set)+'_loader.pt')
+checkpoint = torch.load("./checkpoint/step2_bnet.pth")
+step2_bnet.load_state_dict(checkpoint["net"])
 
-print("-------%s seconds for data preparation----------" % (time.time() - start_time))
+print(checkpoint['acc'])
 
-def test():
-    net.eval()
+checkpoint = torch.load("./checkpoint/snet.pth")
+snet.load_state_dict(checkpoint["net"])
+
+checkpoint = torch.load("./checkpoint/pnet.pth")
+pnet.load_state_dict(checkpoint["net"])
+
+def step1_test():
+    print('step1 test ...')
+    step1_bnet.eval()
+    snet.eval()
     correct = 0
     total = 0
-    all_pred = []
-    all_gt = []
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(test_loader):
+        for batch_idx, (inputs, targets) in enumerate(bin_test_loader):
             inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long) # RuntimeError: Expected object of scalar type Long but got scalar type Byte for argument #2 'target' in call to _thnn_nll_loss_forward
-            outputs = net(inputs) # bs, 5, 35 ; targets bs, 35
-            predicted = outputs.max(1)[1]
-            correct += predicted.eq(targets).sum().item()
-            total += torch.numel(targets)
+            if inputs.size(2) != 128*3000:
+                idx = list(range(0, 128*6000, 2))
+                inputs = inputs[:, :, idx]
+            bout  = step1_bnet(inputs)
+            sout  = snet(bout)
+            loss, corr_batch, total_batch = gdl(sout, targets, sout.size(2))
+            total    += total_batch
+            correct  += corr_batch.item()
+    test_acc = correct/total
+    print(correct, '/', total, ': ', test_acc)
 
-            all_pred.append(predicted.cpu())
-            all_gt.append(targets.cpu())
-    test_acc = correct/(total+0.0)
-    print(test_acc)
-    # draw cm
-    pred, gt = np.concatenate(all_pred), np.concatenate(all_gt)
-    pred, gt = pred.reshape(-1), gt.reshape(-1)
-    plot_confusion_matrix_from_data(gt, pred, [], True, 'Organges', '.2f', 0.5, False, 2, 'y')
+def step2_test():
+    print('step2 test ...')
+    step2_bnet.eval()
+    pnet.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(seq_test_loader):
+            inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long) # RuntimeError: Expected object of scalar type Long but got scalar type Byte for argument #2 'target' in call to _thnn_nll_loss_forward
+            if inputs.size(2) != 128*3000:
+                idx = list(range(0, 128*6000, 2))
+                inputs = inputs[:, :, idx]
+            bout  = step2_bnet(inputs)
+            sout  = snet(bout)
+            bsout = torch.max(sout, dim=2)[1]
+            pin   = seg_pool(bout, bsout)
+            pout  = pnet(pin)
+            loss, corr_batch, total_batch = gdl(pout, targets, pout.size(2))
+            total    += total_batch
+            correct  += corr_batch.item()
+    test_acc = correct/total
+    print(correct, '/', total, ': ', test_acc)
 
-test()
+step1_test()
+step2_test()

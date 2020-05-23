@@ -18,10 +18,49 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+import torch.nn.functional as F
+
+def gdl(pred, gt, class_num):
+    # generalized dice loss
+    # pred: bs, seq_len, class_num
+    # gt  : bs, seq_len
+    onehot_y = F.one_hot(gt.long(), class_num)
+
+    intersection = torch.sum(onehot_y * pred)
+    union        = torch.sum(onehot_y + pred)
+    loss         = 1 - 2 * intersection / (union * class_num)
+
+    pred = torch.argmax(pred, dim=2)
+    corr  = torch.sum(torch.eq(pred.long(), gt.long())).item()
+    total = torch.numel(gt)
+
+    return loss, corr, total
+
+def make_bin_loader(loader):
+    x, y = loader.dataset.tensors[0], loader.dataset.tensors[1]
+    if torch.numel(y) == y.size(0):
+        bin_y = convert_class_to_bin(y)
+    else:
+        bin_y = [convert_class_to_bin(y[yy]) for yy in range(y.size(0))]
+        bin_y = [yy.unsqueeze(0) for yy in bin_y]
+        bin_y = torch.cat(bin_y)
+    dataset = TensorDataset(x, bin_y)
+    bin_loader = DataLoader(dataset, batch_size=loader.batch_size)
+    return bin_loader
+
+def convert_class_to_bin(y):
+    ans    = torch.rand(y.size(0))
+    ans[0] = 0
+    for i in range(1, y.size(0)):
+        if y[i] == y[i-1]:
+            ans[i] = 0
+        else:
+            ans[i] = 1
+    return ans
 
 def make_seq_loader(loader, seq_len, stride):
-    # input:  loader of size [#n, 1, #dim], [#n]
-    # reture: loader of size [#n, seq_len, #dim], [#n]
+    # input : loader of size [#n, 1, #dim], [#n]
+    # return: loader of size [#n, seq_len, #dim], [#n]
 
     x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
     idx    = gen_seq(x.shape[0], seq_len, stride)
