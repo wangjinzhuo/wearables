@@ -10,8 +10,8 @@ import math
 import random
 import argparse
 
-from model import *
 from segnet import *
+from plot_cm import *
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -69,8 +69,8 @@ def step2_test():
     print('step2 test ...')
     step2_bnet.eval()
     pnet.eval()
-    correct = 0
-    total = 0
+    correct, total = 0, 0
+    pred, gt = [], []
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(seq_test_loader):
             inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long) # RuntimeError: Expected object of scalar type Long but got scalar type Byte for argument #2 'target' in call to _thnn_nll_loss_forward
@@ -85,8 +85,14 @@ def step2_test():
             loss, corr_batch, total_batch = gdl(pout, targets, pout.size(2))
             total    += total_batch
             correct  += corr_batch.item()
+
+            pred.append(pout.cpu()), gt.append(targets.cpu())
     test_acc = correct/total
     print(correct, '/', total, ': ', test_acc)
+    # draw cm
+    pred, gt = np.concatenate(pred), np.concatenate(gt)
+    pred, gt = pred.reshape(-1), gt.reshape(-1)
+    plot_confusion_matrix_from_data(gt, pred, [], True, 'Oranges', '.2f', 0.5, False, 2, 'y')
 
 step1_test()
 step2_test()

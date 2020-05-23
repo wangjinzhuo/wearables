@@ -10,8 +10,8 @@ import math
 import random
 import argparse
 
-from model import *
 from utime import *
+from plot_cm import *
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -48,8 +48,8 @@ print("best acc: ", best_acc)
 
 def test():
     net.eval()
-    correct = 0
-    total = 0
+    correct, total = 0, 0
+    pred, gt = [], []
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(test_loader):
             print(batch_idx)
@@ -58,7 +58,14 @@ def test():
             predicted = outputs.max(1)[1]
             total += torch.numel(targets)
             correct += predicted.eq(targets).sum().item()
+
+            pred.append(outputs.cpu()), gt.append(targets.cpu())
     test_acc = correct/total
     print(correct, '/', total, ': ', test_acc)
+
+    # draw cm
+    pred, gt = np.concatenate(pred), np.concatenate(gt)
+    pred, gt = pred.reshape(-1), gt.reshape(-1)
+    plot_confusion_matrix_from_data(gt, pred, [], True, 'Oranages', '.2f', 0.5, False, 2, 'y')
 
 test()
