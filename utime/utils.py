@@ -22,15 +22,16 @@ import torch.nn.functional as F
 
 def gdl(pred, gt, class_num):
     # generalized dice loss
-    # pred: bs, seq_len, class_num
+    # pred: bs, class_num, seq_len
     # gt  : bs, seq_len
     onehot_y = F.one_hot(gt.long(), class_num)
+    pred_t   = pred.permute(0, 2, 1)
 
-    intersection = torch.sum(onehot_y * pred)
-    union        = torch.sum(onehot_y + pred)
+    intersection = torch.sum(onehot_y * pred_t)
+    union        = torch.sum(onehot_y + pred_t)
     loss         = 1 - 2 * intersection / (union * class_num)
 
-    pred = torch.argmax(pred, dim=2)
+    pred  = torch.argmax(pred, dim=1)
     corr  = torch.sum(torch.eq(pred.long(), gt.long())).item()
     total = torch.numel(gt)
 
