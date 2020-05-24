@@ -30,7 +30,11 @@ start_time = time.time()
 ch_0_loader_list = [torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_'+str(ss)+'.pt') for ss in range(1, 6, 1)]
 
 trainloader = combine_loader(ch_0_loader_list[:1])
-valloader  = combine_loader(ch_0_loader_list[-1:])
+valloader   = combine_loader(ch_0_loader_list[-1:])
+
+tr_y, val_y = trainloader.dataset.tensors[1], valloader.dataset.tensors[1]
+print('train num: ', tr_y.size(0))
+print('valid num: ', val_y.size(0))
 
 print("-------%s seconds for data preparation----------" % (time.time() - start_time))
 
@@ -50,9 +54,9 @@ if args.resume:
     best_acc = checkpoint["acc"]
     start_epoch = checkpoint["epoch"]
     print("best acc: ", best_acc)
-    optimizer = optim.SGD(net.parameters(), lr=0.00001, momentum=0.9, weight_decay=5e-4)
+    optimizer = optim.SGD(net.parameters(), lr=1e-5, momentum=0.9, weight_decay=5e-4)
 else:
-    optimizer = optim.SGD(net.parameters(), lr=0.0001, momentum=0.9, weight_decay=5e-4)
+    optimizer = optim.SGD(net.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
 
 criterion = nn.CrossEntropyLoss()
 lr_scheduler = StepLR(optimizer, step_size=100, gamma=0.1)
