@@ -68,20 +68,16 @@ def train(epoch):
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         inputs  = inputs.to(device, dtype=torch.float)
         targets = targets.to(device, dtype=torch.long)
-        #print(inputs.size(), targets.size()) # bs, 1, dim*35;  bs, 35
         if inputs.size(2) != 35*3000:
             idx    = list(range(0,6000*35,2))
             inputs = inputs[:,:,idx]
         optimizer.zero_grad()
         outputs = net(inputs)
-        #print(outputs.size()) # bs, 5,35
-        #print(targets.size()) # bs,35
-        #loss = criterion(outputs, targets)
         loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
-        correct    += correct_batch.item()
+        correct    += correct_batch
         total      += total_batch
         progress_bar(batch_idx, len(train_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                          % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
@@ -103,7 +99,7 @@ def val(epoch):
                 inputs = inputs[:,:,idx]
             outputs = net(inputs)
             loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
-            correct  += correct_batch.item()
+            correct  += correct_batch
             total    += total_batch
             val_loss += loss.item()
             progress_bar(batch_idx, len(val_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
