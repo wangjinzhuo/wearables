@@ -25,14 +25,18 @@ device      = "cuda" if torch.cuda.is_available() else "cpu"
 best_acc    = 0 # best val accuracy
 start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
-print("preparing train and validation dataloader ...")
-train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_1.pt')
-val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
+print("preparing loader ...")
+train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_2/ss_1.pt')
+val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_2/ss_2.pt')
 
-print('middle ...')
 train_loader = make_seq_loader(train_loader, seq_len=35, stride=35)
 val_loader   = make_seq_loader(val_loader, seq_len=35, stride=35)
-print("finish preparing train and validation dataloader ...")
+
+tr_y, val_y  = train_loader.dataset.tensors[1], val_loader.dataset.tensors[1]
+print('training sample: ', tr_y.size(0))
+print('valid sample: ', val_y.size(0))
+
+print("finish ...")
 
 net = Utime()
 net = net.to(device)
@@ -49,22 +53,6 @@ if args.resume:
     best_acc = checkpoint["acc"]
     start_epoch = checkpoint["epoch"]
     print("best acc: ", best_acc)
-
-def gdl(pred, gt):
-    # generalized dice loss
-    # pred: 32, 5, 35
-    # gt  : 32, 35
-    onehot_y  = F.one_hot(gt.long(), 5)
-    pred_     = pred.permute(0,2,1)
-
-    intersection = torch.sum(onehot_y * pred_)
-    union        = torch.sum(onehot_y + pred_)
-    loss         = 1 - 2 * intersection / (union * 5)
-
-    predl   = torch.argmax(pred, dim=1)
-    correct = torch.sum(torch.eq(predl.long(), gt.long()))
-    total   = torch.numel(gt)
-    return loss, correct, total
 
 optimizer = optim.SGD(net.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
 #optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
@@ -89,7 +77,7 @@ def train(epoch):
         #print(outputs.size()) # bs, 5,35
         #print(targets.size()) # bs,35
         #loss = criterion(outputs, targets)
-        loss, correct_batch, total_batch = gdl(outputs, targets)
+        loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
@@ -114,7 +102,7 @@ def val(epoch):
                 idx    = list(range(0,6000*35,2))
                 inputs = inputs[:,:,idx]
             outputs = net(inputs)
-            loss, correct_batch, total_batch = gdl(outputs, targets)
+            loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
             correct  += correct_batch.item()
             total    += total_batch
             val_loss += loss.item()
