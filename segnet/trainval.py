@@ -42,7 +42,7 @@ bin_val_loader   = make_bin_loader(val_loader)
 
 print("finish preparing train and validation dataloader ...")
 
-step1_bnet, step2_bnet, snet, pnet = Bnet(), Bnet(), Snet(), Pnet()
+step1_bnet, step2_bnet, snet, pnet = Bnet(ch=1), Bnet(ch=1), Snet(), Pnet()
 step1_bnet, step2_bnet, snet, pnet = step1_bnet.to(device), step2_bnet.to(device), snet.to(device), pnet.to(device)
 if device == "cuda":
     step1_bnet, step2_bnet, snet, pnet = nn.DataParallel(step1_bnet), nn.DataParallel(step2_bnet), nn.DataParallel(snet), nn.DataParallel(pnet)

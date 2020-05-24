@@ -39,7 +39,7 @@ print('valid num: ', val_y.size(0))
 print("-------%s seconds for data preparation----------" % (time.time() - start_time))
 
 print("building model...")
-net = DeepSleepNet()
+net = DeepSleepNet(ch=1)
 net = net.to(device)
 if device == "cuda":
     net = nn.DataParallel(net)

@@ -26,10 +26,10 @@ class BiLSTM(nn.Module):
 
 class DeepSleepNet(nn.Module):
 
-    def __init__(self):
+    def __init__(self, ch=1):
         super(DeepSleepNet, self).__init__()
         self.features_s = nn.Sequential(
-            nn.Conv1d(1, 64, 50, 6),
+            nn.Conv1d(ch, 64, 50, 6),
             nn.BatchNorm1d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(kernel_size=8, stride=8),
@@ -44,7 +44,7 @@ class DeepSleepNet(nn.Module):
             nn.MaxPool1d(kernel_size=2, stride=2),
         )
         self.features_l = nn.Sequential(
-            nn.Conv1d(1, 64, 400, 50),
+            nn.Conv1d(ch, 64, 400, 50),
             nn.BatchNorm1d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(kernel_size=4, stride=4),
@@ -83,9 +83,10 @@ class DeepSleepNet(nn.Module):
         return x
 
 if __name__ == '__main__':
-    net = DeepSleepNet()
+    ch_num = 3
+    net = DeepSleepNet(ch=ch_num)
     net = net.cuda()
-    inputs = torch.rand(3, 1, int(Fs*30))
+    inputs = torch.rand(3, ch_num, int(Fs*30))
     inputs = inputs.cuda()
     outputs = net(inputs)
     print(outputs.size())

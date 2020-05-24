@@ -7,10 +7,10 @@ model_urls = {
 
 
 class Utime(nn.Module):
-    def __init__(self):
+    def __init__(self, ch=1):
         super(Utime, self).__init__()
         self.enc_1 = nn.Sequential(
-            nn.Conv1d(1, 16, 5, padding=2),
+            nn.Conv1d(ch, 16, 5, padding=2),
             nn.BatchNorm1d(16),
             nn.ReLU(inplace=True),
 
@@ -198,9 +198,10 @@ def utime(pretrained=False, progress=True, **kwargs):
     return model
 
 if __name__ == '__main__':
+    ch_num = 3
     batch_size = 2
-    model = utime()
-    x = torch.rand(batch_size, 1, 3000*35)
+    model = utime(ch=ch_num)
+    x = torch.rand(batch_size, ch_num, 3000*35)
     y = model(x)
     print(y.size())
     print("total param num is: {}".format(

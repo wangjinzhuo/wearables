@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 
 class Bnet(nn.Module):
-    def __init__(self):
+    def __init__(self, ch=1):
         super(Bnet, self).__init__()
         self.features = nn.Sequential(
-            nn.Conv1d(1, 32, 16, 8),
+            nn.Conv1d(ch, 32, 16, 8),
             nn.BatchNorm1d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(16, 8),
@@ -94,9 +94,10 @@ def seg_pool(x, segment):
     return out
 
 if __name__ == '__main__':
-    x    = torch.rand(2,1,128*3000)
+    ch_num = 3
+    x    = torch.rand(2, ch_num, 128*3000)
 
-    bnet = Bnet()
+    bnet = Bnet(ch=ch_num)
     bout = bnet(x)
 
     snet = Snet()
@@ -108,4 +109,6 @@ if __name__ == '__main__':
     pout = pnet(pin)
 
     print('bout: {}\nsout: {}\npout: {}'.format(bout.shape, sout.shape, pout.shape))
+    print('params of bnet: {}'.format(sum(torch.numel(p) for p in bnet.parameters())))
+    print('params of snet: {}'.format(sum(torch.numel(p) for p in snet.parameters())))
     print('params of pnet: {}'.format(sum(torch.numel(p) for p in pnet.parameters())))

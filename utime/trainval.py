@@ -38,7 +38,7 @@ print('valid sample: ', val_y.size(0))
 
 print("finish ...")
 
-net = Utime()
+net = Utime(ch=1)
 net = net.to(device)
 if device == "cuda":
     net = nn.DataParallel(net)
@@ -54,7 +54,7 @@ if args.resume:
     start_epoch = checkpoint["epoch"]
     print("best acc: ", best_acc)
 
-optimizer = optim.SGD(net.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4)
+optimizer = optim.SGD(net.parameters(), lr=1e-7, momentum=0.9, weight_decay=5e-4)
 #optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
 
 # Training
