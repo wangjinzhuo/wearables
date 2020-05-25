@@ -83,10 +83,11 @@ class DeepSleepNet(nn.Module):
         return x
 
 if __name__ == '__main__':
-    ch_num = 3
+    ch_num = 1
+    batch_size = 5
     net = DeepSleepNet(ch=ch_num)
     net = net.cuda()
-    inputs = torch.rand(3, ch_num, int(Fs*30))
+    inputs = torch.rand(batch_size, ch_num, int(Fs*30))
     inputs = inputs.cuda()
     outputs = net(inputs)
     print(outputs.size())

@@ -94,8 +94,9 @@ def seg_pool(x, segment):
     return out
 
 if __name__ == '__main__':
-    ch_num = 3
-    x    = torch.rand(2, ch_num, 128*3000)
+    ch_num = 1
+    batch_size = 5
+    x    = torch.rand(batch_size, ch_num, 128*3000)
 
     bnet = Bnet(ch=ch_num)
     bout = bnet(x)
