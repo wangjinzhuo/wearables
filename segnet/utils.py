@@ -96,11 +96,11 @@ def get_mean_and_std(dataset):
 def init_params(net):
     '''Init layer parameters.'''
     for m in net.modules():
-        if isinstance(m, nn.Conv2d):
+        if isinstance(m, nn.Conv1d):
             init.kaiming_normal(m.weight, mode='fan_out')
             if m.bias:
                 init.constant(m.bias, 0)
-        elif isinstance(m, nn.BatchNorm2d):
+        elif isinstance(m, nn.BatchNorm1d):
             init.constant(m.weight, 1)
             init.constant(m.bias, 0)
         elif isinstance(m, nn.Linear):
