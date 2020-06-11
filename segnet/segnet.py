@@ -69,7 +69,7 @@ class Parabit(nn.Module):
         super(Parabit, self).__init__()
         self.bits = []
         for i in range(seq_len):
-            bit = nn.Linear(seq_len, class_num)
+            bit = nn.Linear(1, class_num)
             bit_name = 'seq_at_%d' % i
             setattr(self, bit_name, bit)
             self.bits.append(getattr(self, bit_name))
@@ -92,6 +92,19 @@ def seg_pool(x, segment):
     p   = nn.MaxPool1d(16)
     out = p(out)
     return out
+
+class Fc(nn.Module):
+    def __init__(self):
+        super(Fc, self).__init__()
+        self.cls = nn.Sequential( nn.MaxPool1d(16), #nn.Linear(4096*16, 4096),
+            nn.Flatten(),
+            nn.Linear(4096, 1024),
+            nn.Linear(1024, 128),
+            Parabit(128, 5),
+        )
+    def forward(self, x):
+        x = self.cls(x)
+        return x
 
 if __name__ == '__main__':
     ch_num = 1

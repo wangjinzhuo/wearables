@@ -170,6 +170,7 @@ class Utime(nn.Module):
         x = x.view(-1, 5, 3000, 35)
 
         x = torch.mean(x, dim=2)
+        print(x.size())
         x = self.final_conv(x)
 
         return x

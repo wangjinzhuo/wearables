@@ -215,6 +215,8 @@ def step2_val(epoch):
             starget = torch.cat([x.unsqueeze(0) for x in slist])
             starget = starget.to(device, dtype=torch.long)
             sloss, scorr, stotal = gdl(sout, starget, sout.size(2))
+            torch.save(sout, 'sout.pt')
+            torch.save(starget, 'starget.pt')
             print('snet acc: {}'.format(scorr/stotal))
             # finish
 

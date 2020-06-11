@@ -26,11 +26,10 @@ best_acc    = 0 # best val accuracy
 start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
 print("preparing loader ...")
-train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_2/ss_1.pt')
-val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_2/ss_2.pt')
-
-train_loader = make_seq_loader(train_loader, seq_len=35, stride=35)
-val_loader   = make_seq_loader(val_loader, seq_len=35, stride=35)
+train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_1.pt')
+val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
+train_loader = make_seq_loader(train_loader, seq_len=35, stride=15)
+val_loader   = make_seq_loader(val_loader, seq_len=35, stride=15)
 
 tr_y, val_y  = train_loader.dataset.tensors[1], val_loader.dataset.tensors[1]
 print('training sample: ', tr_y.size(0))
@@ -54,7 +53,7 @@ if args.resume:
     start_epoch = checkpoint["epoch"]
     print("best acc: ", best_acc)
 
-optimizer = optim.SGD(net.parameters(), lr=1e-7, momentum=0.9, weight_decay=5e-4)
+optimizer = optim.SGD(net.parameters(), lr=1e-5, momentum=0.9, weight_decay=5e-4)
 #optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
 
 # Training
@@ -120,7 +119,7 @@ def val(epoch):
         torch.save(state, './checkpoint/ckpt.pth')
         best_acc = acc
 
-lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
 for epoch in range(start_epoch, start_epoch+400):
     train(epoch)
     val(epoch)
