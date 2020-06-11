@@ -7,12 +7,13 @@
     input x [bs, seq_len, 30*100]
     1: send x to time-frequency representation obtaining  x: [bs, seq_len, 29, 129]
     2: send x to filterbank obtaining                     x: [bs, seq_len, 29, 32]  # (29,129)*(129,32) = (29,32)
-    3: reshape [line 75 in seqsleepnet_sleep.py]          x: [bs, seq_len, 29*32]   # 29*32 = 928
-    4: send each epoch of x to biRNN obtaining seq_len of x: [bs, seq_len, 64]
-    5: send x to an attention layer obtaining             x: [bs, seq_len]
-    6: send x to biRNN obtaining                          x: [bs, seq_len]
-    7: send each output of last step to a fc layer obtaining x: [bs, seq_len, class_num]
-    8: compute loss
+    3: reshape                                            x: [bs*seq_len, 29, 32]   # 29*32 = 928
+    4: send x to biRNN obtaining                          x: [bs*seq_len, 29, 64*2]
+    5: send x to an attention layer obtaining             x: [bs*seq_len, 64*2]
+    6: reshape                                            x: [bs, seq_len, 64*2]
+    7: send x to biRNN obtaining                          x: [bs, seq_len, 64*2]
+    8: send x to seq_len of fc layers obtaining           x: [bs, seq_len, class_num]
+    9: compute loss
 '''
 
 import torch
