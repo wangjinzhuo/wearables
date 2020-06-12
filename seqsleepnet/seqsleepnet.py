@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.nn.parameter import Parameter
 import numpy as np
 from utils import *
 
@@ -65,9 +66,8 @@ class SeqSleepNet(nn.Module):
         self.seq_len   = seq_len
         self.class_num = class_num
 
-        self.filterbankshape = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float) # [129, 32]
-        filterweight         = torch.randn(129, 32, requires_grad=True)
-        setattr(self, 'filter', filterweight)
+        self.filterbankshape = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
+        self.filterweight         = Parameter(torch.Tensor(129, 32)).cuda()
 
         self.epoch_rnn  = BiGRU(32, 64, 1).cuda()
         #self.attention = Attention(64)
@@ -80,7 +80,7 @@ class SeqSleepNet(nn.Module):
 
         # torch.mul -> element-wise dot;  torch.matmul -> matrix multiplication
         x            = torch.reshape(x, [-1, 129])                      # [bs, seq_len*29, 129]
-        filterweight = torch.sigmoid(self.filter)                       # [129, 32]
+        filterweight = torch.sigmoid(self.filterweight)                 # [129, 32]
         filter_      = torch.mul(filterweight, self.filterbankshape)    # [129, 32]
         filter_      = filter_.cuda()
         x            = torch.matmul(x, filter_)                         # [bs, seq_len*29, 32]
