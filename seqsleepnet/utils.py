@@ -99,6 +99,7 @@ def preprocessing(x):
         jout = torch.unsqueeze(jout, 0)
         ilist.append(jout)
     out = torch.cat(ilist, 0) # out [bs, seq_len, 29, 129]
+    out = out.type(torch.float)
     return out
 
 def combine_loader(loader_list):
@@ -129,6 +130,44 @@ def make_sleep_edf_dataloader(dataset_dir, batch_size):
     dataset = TensorDataset(torch_x, torch_y)
     dataloader = DataLoader(dataset, batch_size=batch_size)
     return dataloader
+
+def gdl(pred, gt, class_num):
+    # generalized dice loss
+    # pred: bs, class_num, seq_len
+    # gt  : bs, seq_len
+    onehot_y = F.one_hot(gt.long(), class_num)
+    pred_t   = pred.permute(0, 2, 1)
+
+    intersection = torch.sum(onehot_y * pred_t)
+    union        = torch.sum(onehot_y + pred_t)
+    loss         = 1 - 2 * intersection / (union * class_num)
+
+    pred  = torch.argmax(pred, dim=1)
+    corr  = torch.sum(torch.eq(pred.long(), gt.long())).item()
+    total = torch.numel(gt)
+
+    return loss, corr, total
+
+def make_seq_loader(loader, seq_len, stride):
+    # input : loader of size [#n, 1, #dim], [#n]
+    # return: loader of size [#n, seq_len, #dim], [#n]
+
+    x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
+    idx    = gen_seq(x.shape[0], seq_len, stride)
+    xx, yy = [x[i:i+seq_len, :, :] for i in idx], [y[i:i+seq_len] for i in idx]
+    xx     = [x.reshape(-1, x.shape[0]*x.shape[2]) for x in xx]
+    xx, yy = [x.unsqueeze(0) for x in xx], [y.unsqueeze(0) for y in yy]
+    xx, yy = torch.cat(xx), torch.cat(yy)
+    dataset = TensorDataset(xx, yy)
+    loader  = DataLoader(dataset, batch_size=loader.batch_size)
+    return loader
+
+def gen_seq(n, seq_len, stride):
+    res = []
+    for i in range(0, n, stride):
+        if i + seq_len <= n:
+            res.append(i)
+    return res
 
 def make_dataloader(dataset_dir, files, channel, batch_size, shuffle):
     x, y = [], []

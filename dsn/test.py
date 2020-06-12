@@ -8,7 +8,7 @@ from dsn import *
 from plot_cm import *
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-test_loader = torch.load('../../dsn_data/ss5_test.pt')
+test_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_4.pt')
 net = DeepSleepNet()
 net = net.to(device)
 if device == 'cuda':

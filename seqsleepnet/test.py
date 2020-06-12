@@ -4,12 +4,12 @@ import numpy as np
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 
-from utime import *
+from seqsleepnet import *
 from utils import *
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 test_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_1.pt')
-net = Utime()
+net = SeqSleepNet(seq_len=20, class_num=5)
 net = net.to(device)
 if device == 'cuda':
     net = nn.DataParallel(net)
@@ -25,8 +25,10 @@ def test():
     net.eval()
     pred, gt = [], []
     for idx, (inputs, targets) in enumerate(test_loader):
+        inputs = preprocessing(inputs)
         inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long)
         outputs = net(inputs) # outputs bs, 5; targets bs, 5
+        outputs = outputs.transpose(0, 2, 1) # bs, seq, class_num --> bs, class_num, seq_len
         outputs, targets = outputs.max(1)[1], targets.max(1)[1]
         pred.append(outputs.cpu())
         gt.append(targets.cpu())

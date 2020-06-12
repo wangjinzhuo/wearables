@@ -5,9 +5,9 @@
 
     Original SeqSleepNet implmentation includes following steps:
     input x [bs, seq_len, 30*100]
-    1: send x to time-frequency representation obtaining  x: [bs, seq_len, 29, 129]
-    2: send x to filterbank obtaining                     x: [bs, seq_len, 29, 32]  # (29,129)*(129,32) = (29,32)
-    3: reshape                                            x: [bs*seq_len, 29, 32]   # 29*32 = 928
+    1: send x to time-frequency representation obtaining  x: [bs, seq_len, 29, 129] # 29 = 1 + (Fs*30-Fs*frame_size)/(Fs*frame_stride), 129 = 1 + NFFT/2
+    2: send x to filterbank obtaining                     x: [bs, seq_len, 29, 32]  #
+    3: reshape                                            x: [bs*seq_len, 29, 32]   # (29,129)*(129,32) = (29,32)
     4: send x to biRNN obtaining                          x: [bs*seq_len, 29, 64*2]
     5: send x to an attention layer obtaining             x: [bs*seq_len, 64*2]
     6: reshape                                            x: [bs, seq_len, 64*2]
@@ -69,10 +69,8 @@ class SeqSleepNet(nn.Module):
         filterweight         = torch.randn(129, 32, requires_grad=True)
         setattr(self, 'filter', filterweight)
 
-        #self.epoch_rnn = BiGRU(seq_len=29*32, hidden_dim=64, dropout=0.75, num_layers=1)
         self.epoch_rnn  = BiGRU(32, 64, 1).cuda()
         #self.attention = Attention(64)
-        #self.seq_rnn   = BiGRU(seq_len=64*2, hidden_dim=self.seq_len, dropout=0.75, num_layers=1)
         self.seq_rnn    = BiGRU(64*2, 64, 1).cuda()
         self.cls        = Parabit(self.seq_len, 64*2, self.class_num)
 
@@ -82,16 +80,14 @@ class SeqSleepNet(nn.Module):
 
         # torch.mul -> element-wise dot;  torch.matmul -> matrix multiplication
         x            = torch.reshape(x, [-1, 129])                      # [bs, seq_len*29, 129]
-        filterweight = torch.sigmoid(self.filter)                 # [129, 32]
+        filterweight = torch.sigmoid(self.filter)                       # [129, 32]
         filter_      = torch.mul(filterweight, self.filterbankshape)    # [129, 32]
-        filter_      = filter_.to('cuda')
-        x = torch.matmul(x, filter_)                                    # [bs, seq_len*29, 32]
-        x = torch.reshape(x, [-1, 29, 32])  # [bs*seq_len, 29, 32]
-        x = self.epoch_rnn(x)               # [bs*seq_len, 29, 64*2]
+        filter_      = filter_.cuda()
+        x            = torch.matmul(x, filter_)                         # [bs, seq_len*29, 32]
+        x            = torch.reshape(x, [-1, 29, 32])                   # [bs*seq_len, 29, 32]
+        x            = self.epoch_rnn(x)                                # [bs*seq_len, 29, 64*2]
 
-        # above is epoch-wise learning
-        # below is seq-wise learning
-
+        # above is epoch-wise learning, below is seq-wise learning
         x = torch.mean(x, dim=1) # [bs*seq, 64*2] to be replaced with attention
         x = torch.reshape(x, [-1, self.seq_len, 64*2]) # [bs, seq_len, 64*2]
         x = self.seq_rnn(x)                            # [bs, seq_len, 64*2]
@@ -107,14 +103,15 @@ if __name__ == '__main__':
     net        = net.cuda()
     inputs     = torch.rand(batch_size, seq_len, int(100*30)) # [bs, seq_len, 30*100]
     inputs     = preprocessing(inputs) # [bs, seq_len, 29, 129]
-    inputs     = inputs.type(torch.float)
     inputs     = inputs.cuda()
-    outputs    = net(inputs) # [bs, seq_len]
+    outputs    = net(inputs) # [bs, seq_len, class_num]
     params     = list(net.parameters())
     print(outputs.size())
     print("total param num is: {}".format(
         sum(torch.numel(p) for p in params)
         )
     )
+    '''
     for name, param in net.named_parameters():
         print(name, param.shape)
+    '''
