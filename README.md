@@ -8,4 +8,4 @@ model    |  input epoch  | network input shape            | total paramaeter
 dsn      |        1      | #ch * Fs(200) * 30               |   26,440,965
 utime    |       35      | #ch * Fs(100) * 30 * 35            |    1,220,317
 segnet   |      128      | #ch * Fs(100) * 30 * 128           |    3,674,464
-seqsleepnet |   {10, 20, 30}      | #ch * Fs(100) * 30 * {10, 20, 30} --> (29 * 129) * 20 |      125,028 (20 epoch)
+seqsleepnet |   {10, 20, 30}      | #ch * Fs(100) * 30 * {10, 20, 30} --> (29 * 129) * {10, 20, 30} |      125,028 (20 epoch)
