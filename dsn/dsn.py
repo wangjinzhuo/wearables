@@ -10,7 +10,6 @@ class BiLSTM(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, bidirectional=True)
-        #self.fc = nn.Linear(hidden_size, num_classes)
 
     def forward(self, x):
         # set initial hidden and cell states
@@ -19,9 +18,6 @@ class BiLSTM(nn.Module):
 
         # forward propagate LSTM
         out, _ = self.lstm(x, (h0, c0))
-
-        # decode the hidden state of the last time step
-        #out = self.fc(out[:, -1, :])
         return out
 
 class DeepSleepNet(nn.Module):
@@ -72,9 +68,9 @@ class DeepSleepNet(nn.Module):
         x_l = self.features_l(x)
         x_s = x_s.flatten(1,2)
         x_l = x_l.flatten(1,2)
-        x = torch.cat((x_s, x_l),1)
+        x = torch.cat((x_s, x_l),1) # [bs, 7296]
         x_seq = x.unsqueeze(1)
-        x_blstm = self.features_seq(x_seq)
+        x_blstm = self.features_seq(x_seq) # [bs, 1, 1024]
         x_blstm = torch.squeeze(x_blstm, 1)
         x_res = self.res(x)
         x = torch.mul(x_res, x_blstm)
