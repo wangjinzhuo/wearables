@@ -14,6 +14,8 @@ import itertools
 from utils import *
 from segnet import *
 
+# this strategy is the same as that in faster-rcnn, i.e. 4-step alternative training
+
 def parse_cmd_args():
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument("--resume",      action="store_true", help="resume from checkpoint")
