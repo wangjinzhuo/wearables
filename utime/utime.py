@@ -1,11 +1,6 @@
 import torch
 import torch.nn as nn
 
-model_urls = {
-    'utime': 'https://**.pth',
-}
-
-
 class Utime(nn.Module):
     def __init__(self, ch=1):
         super(Utime, self).__init__()
@@ -187,16 +182,6 @@ def manually_pad(x, dim):
     tmp = torch.zeros(x.size()[0], x.size()[1], dim, device=x.device)
     tmp[:, :, :x.size()[2]] = x[:, :, :x.size()[2]]
     return tmp
-
-
-def utime(pretrained=False, progress=True, **kwargs):
-    model = Utime(**kwargs)
-    if pretrained:
-        assert False
-        state_dict = load_state_dict_from_url(model_urls['utime'],
-                                              progress=progress)
-        model.load_state_dict(state_dict)
-    return model
 
 if __name__ == '__main__':
     ch_num = 1
