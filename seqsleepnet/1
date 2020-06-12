@@ -31,9 +31,10 @@ class BiGRU(nn.Module):
         self.gru         = nn.GRU(input_size, hidden_size, num_layers, batch_first=True, bidirectional=True)
 
     def forward(self, x):
-        h0     = torch.randn(self.num_layers*2, x.size(0), self.hidden_size).cuda()
-        #c0     = torch.randn(self.num_layers*2, x.size(0), self.hidden_size)
-        out, _ = self.gru(x, h0)
+        h0     = torch.randn(self.num_layers*2, x.size(0), self.hidden_size)
+        c0     = torch.randn(self.num_layers*2, x.size(0), self.hidden_size)
+        h0, c0 = h0.cuda(), c0.cuda()
+        out, _ = self.gru(x, (h0, c0))
         return out
 
 class Parabit(nn.Module):
