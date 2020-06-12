@@ -9,7 +9,7 @@ class BiLSTM(nn.Module):
         super(BiLSTM, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=0.5, bidirectional=True)
 
     def forward(self, x):
         # set initial hidden and cell states
@@ -56,10 +56,10 @@ class DeepSleepNet(nn.Module):
         )
         self.features_seq = nn.Sequential(
             BiLSTM(7296, 512, 2),
-            nn.Dropout(),
         )
         self.res = nn.Linear(7296, 1024)
         self.classifier = nn.Sequential(
+            nn.Dropout(),
             nn.Linear(1024, 5),
         )
 
@@ -91,3 +91,16 @@ if __name__ == '__main__':
         sum(torch.numel(p) for p in params)
         )
     )
+    a, b, c, d, e  = 0, 0, 0, 0, 0
+    for name, param in net.named_parameters():
+        if '_l' in name:
+            a += torch.numel(param)
+        if '_s' in name:
+            b += torch.numel(param)
+        if 'seq' in name:
+            c += torch.numel(param)
+        if 'res' in name:
+            d += torch.numel(param)
+        if 'class' in name:
+            e += torch.numel(param)
+    print('l: ', a, 's: ', b, 'seq: ', c, 'res: ', d, 'cls: ', e)
