@@ -37,7 +37,8 @@ print('valid sample: ', val_y.size(0))
 
 print("finish ...")
 
-net = SeqSleepNet(seq_len=20, class_num=5)
+filterbanks  = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda()
+net = SeqSleepNet(filterbanks=filterbanks, seq_len=20, class_num=5)
 net = net.to(device)
 if device == "cuda":
     net = nn.DataParallel(net)
@@ -64,17 +65,16 @@ def train(epoch):
     total = 0
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
+        if inputs.size(2) != 3000:
+            idx    = list(range(0,6000,2))
+            inputs = inputs[:,:,idx]
         inputs  = preprocessing(inputs)
         inputs  = inputs.to(device, dtype=torch.float)
         targets = targets.to(device, dtype=torch.long)
-        if inputs.size(2) != 20*3000:
-            idx    = list(range(0,6000*20,2))
-            inputs = inputs[:,:,idx]
         optimizer.zero_grad()
         outputs = net(inputs)
 
-        print(inputs.size(), '... ', outputs.size(), '... ', targets.size())
-        outputs = outputs.transpose(0, 2, 1)
+        outputs = outputs.transpose(2, 1)
         loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
         loss.backward()
         optimizer.step()
@@ -94,14 +94,14 @@ def val(epoch):
     total = 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(val_loader):
+            if inputs.size(2) != 3000:
+                idx    = list(range(0,6000,2))
+                inputs = inputs[:,:,idx]
             inputs  = preprocessing(inputs)
             inputs  = inputs.to(device, dtype=torch.float)
             targets = targets.to(device, dtype=torch.long)
-            if inputs.size(2) != 20*3000:
-                idx    = list(range(0,6000*20,2))
-                inputs = inputs[:,:,idx]
             outputs = net(inputs)
-            outputs = outputs.transpose(0, 2, 1)
+            outputs = outputs.transpose(2, 1)
             loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
             correct  += correct_batch
             total    += total_batch

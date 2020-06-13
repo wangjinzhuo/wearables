@@ -61,19 +61,20 @@ class Parabit(nn.Module):
 
 class SeqSleepNet(nn.Module):
 
-    def __init__(self, seq_len=20, class_num=5):
+    def __init__(self, filterbanks, seq_len=20, class_num=5):
         super(SeqSleepNet, self).__init__()
         self.seq_len   = seq_len
         self.class_num = class_num
+        self.filterbanks = filterbanks
 
         self.filterweight = Parameter(torch.Tensor(129, 32))
-        self.epoch_rnn    = BiGRU(32, 64, 1).cuda()
+        self.epoch_rnn    = BiGRU(32, 64, 1)
 
         self.attweight_w  = Parameter(torch.randn(128, 64))
         self.attweight_b  = Parameter(torch.randn(64))
         self.attweight_u  = Parameter(torch.randn(64))
 
-        self.seq_rnn      = BiGRU(64*2, 64, 1).cuda()
+        self.seq_rnn      = BiGRU(64*2, 64, 1)
         self.cls          = Parabit(self.seq_len, 64*2, self.class_num)
 
     def forward(self, x):
@@ -82,8 +83,8 @@ class SeqSleepNet(nn.Module):
 
         # torch.mul -> element-wise dot;  torch.matmul -> matrix multiplication
         x            = torch.reshape(x, [-1, 129])                      # [bs, seq_len*29, 129]
-        filterbanks  = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
-        filterbank   = torch.mul(self.filterweight, filterbanks)        # [129, 32]
+        #filterbanks  = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
+        filterbank   = torch.mul(self.filterweight, self.filterbanks)        # [129, 32]
         x            = torch.matmul(x, filterbank)                      # [bs, seq_len*29, 32]
         x            = torch.reshape(x, [-1, 29, 32])                   # [bs*seq_len, 29, 32]
         x            = self.epoch_rnn(x)                                # [bs*seq_len, 29, 64*2]
@@ -106,7 +107,8 @@ if __name__ == '__main__':
     batch_size = 2
     seq_len    = 20
     class_num  = 5
-    net        = SeqSleepNet(seq_len=seq_len, class_num=class_num)
+    filterbanks= torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
+    net        = SeqSleepNet(filterbanks=filterbanks, seq_len=seq_len, class_num=class_num)
     net        = net.cuda()
     inputs     = torch.rand(batch_size, seq_len, int(100*30)) # [bs, seq_len, 30*100]
     inputs     = preprocessing(inputs) # [bs, seq_len, 29, 129]

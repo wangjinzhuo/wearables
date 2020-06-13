@@ -17,6 +17,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+import torch.nn.functional as F
 
 def lin_tri_filter_shape(nfilt=20, nfft=512, samplerate=16000, lowfreq=0, highfreq=None):
     """
@@ -153,13 +154,15 @@ def make_seq_loader(loader, seq_len, stride):
     # return: loader of size [#n, seq_len, #dim], [#n]
 
     x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
+    dim    = x.shape[-1]
     idx    = gen_seq(x.shape[0], seq_len, stride)
     xx, yy = [x[i:i+seq_len, :, :] for i in idx], [y[i:i+seq_len] for i in idx]
     xx     = [x.reshape(-1, x.shape[0]*x.shape[2]) for x in xx]
     xx, yy = [x.unsqueeze(0) for x in xx], [y.unsqueeze(0) for y in yy]
     xx, yy = torch.cat(xx), torch.cat(yy)
-    dataset = TensorDataset(xx, yy)
-    loader  = DataLoader(dataset, batch_size=loader.batch_size)
+    xx     = torch.reshape(xx, [-1, seq_len, dim]) # [#n, seq_len, dim]
+    dataset= TensorDataset(xx, yy)
+    loader = DataLoader(dataset, batch_size=loader.batch_size)
     return loader
 
 def gen_seq(n, seq_len, stride):
