@@ -66,13 +66,15 @@ class SeqSleepNet(nn.Module):
         self.seq_len   = seq_len
         self.class_num = class_num
 
-        self.filterbankshape = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
-        self.filterweight         = Parameter(torch.Tensor(129, 32)).cuda()
+        self.filterweight = Parameter(torch.Tensor(129, 32))
+        self.epoch_rnn    = BiGRU(32, 64, 1).cuda()
 
-        self.epoch_rnn  = BiGRU(32, 64, 1).cuda()
-        #self.attention = Attention(64)
-        self.seq_rnn    = BiGRU(64*2, 64, 1).cuda()
-        self.cls        = Parabit(self.seq_len, 64*2, self.class_num)
+        self.attweight_w  = Parameter(torch.randn(128, 64))
+        self.attweight_b  = Parameter(torch.randn(64))
+        self.attweight_u  = Parameter(torch.randn(64))
+
+        self.seq_rnn      = BiGRU(64*2, 64, 1).cuda()
+        self.cls          = Parabit(self.seq_len, 64*2, self.class_num)
 
     def forward(self, x):
         # x: [bs, seq_len, 29, 129]
@@ -80,18 +82,23 @@ class SeqSleepNet(nn.Module):
 
         # torch.mul -> element-wise dot;  torch.matmul -> matrix multiplication
         x            = torch.reshape(x, [-1, 129])                      # [bs, seq_len*29, 129]
-        filterweight = torch.sigmoid(self.filterweight)                 # [129, 32]
-        filter_      = torch.mul(filterweight, self.filterbankshape)    # [129, 32]
-        filter_      = filter_.cuda()
-        x            = torch.matmul(x, filter_)                         # [bs, seq_len*29, 32]
+        filterbanks  = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
+        filterbank   = torch.mul(self.filterweight, filterbanks)        # [129, 32]
+        x            = torch.matmul(x, filterbank)                      # [bs, seq_len*29, 32]
         x            = torch.reshape(x, [-1, 29, 32])                   # [bs*seq_len, 29, 32]
         x            = self.epoch_rnn(x)                                # [bs*seq_len, 29, 64*2]
 
         # above is epoch-wise learning, below is seq-wise learning
-        x = torch.mean(x, dim=1) # [bs*seq, 64*2] to be replaced with attention
+
+        v      = torch.tanh(torch.matmul(torch.reshape(x, [-1, 128]), self.attweight_w) + torch.reshape(self.attweight_b, [1, -1])) # [bs*seq_len, 64]
+        vu     = torch.matmul(v, torch.reshape(self.attweight_u, [-1, 1]))    # [bs*seq_len*29, 64] * [64, 1] -> [bs*seq_len*29, 1]
+        exps   = torch.reshape(torch.exp(vu), [-1, 29])                       # [bs*seq_len*29, 1] -> [bs*seq_len, 29]
+        alphas = exps / torch.reshape(torch.sum(exps, 1), [-1, 1])            # [bs*seq_len, 1]
+        x      = torch.sum(torch.mul(x, torch.reshape(exps, [-1, 29, 1])), 1) # [bs*seq_len, 29, 64*2]*[bs*seq_len, 29, 1] -> [bs*seq_len, 29, 64*2] -> [bs*seq_len, 64*2]
+
         x = torch.reshape(x, [-1, self.seq_len, 64*2]) # [bs, seq_len, 64*2]
         x = self.seq_rnn(x)                            # [bs, seq_len, 64*2]
-        x = self.cls(x)
+        x = self.cls(x)                                # [bs, seq_len, 5]
 
         return x
 
@@ -111,7 +118,5 @@ if __name__ == '__main__':
         sum(torch.numel(p) for p in params)
         )
     )
-    '''
     for name, param in net.named_parameters():
         print(name, param.shape)
-    '''
