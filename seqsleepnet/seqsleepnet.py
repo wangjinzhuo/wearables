@@ -18,10 +18,7 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
 from torch.nn.parameter import Parameter
-import numpy as np
 from utils import *
 
 class BiGRU(nn.Module):
@@ -33,7 +30,6 @@ class BiGRU(nn.Module):
 
     def forward(self, x):
         h0     = torch.randn(self.num_layers*2, x.size(0), self.hidden_size).cuda()
-        #c0     = torch.randn(self.num_layers*2, x.size(0), self.hidden_size)
         out, _ = self.gru(x, h0)
         return out
 
@@ -63,9 +59,9 @@ class SeqSleepNet(nn.Module):
 
     def __init__(self, filterbanks, seq_len=20, class_num=5):
         super(SeqSleepNet, self).__init__()
-        self.seq_len   = seq_len
-        self.class_num = class_num
-        self.filterbanks = filterbanks
+        self.seq_len      = seq_len
+        self.class_num    = class_num
+        self.filterbanks  = filterbanks
 
         self.filterweight = Parameter(torch.Tensor(129, 32))
         self.epoch_rnn    = BiGRU(32, 64, 1)
@@ -78,16 +74,15 @@ class SeqSleepNet(nn.Module):
         self.cls          = Parabit(self.seq_len, 64*2, self.class_num)
 
     def forward(self, x):
-        # x: [bs, seq_len, 29, 129]
+        # x     : [bs, seq_len, 29, 129]
         # return: [bs, seq_len, class_num]
 
         # torch.mul -> element-wise dot;  torch.matmul -> matrix multiplication
-        x            = torch.reshape(x, [-1, 129])                      # [bs, seq_len*29, 129]
-        #filterbanks  = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
-        filterbank   = torch.mul(self.filterweight, self.filterbanks)        # [129, 32]
-        x            = torch.matmul(x, filterbank)                      # [bs, seq_len*29, 32]
-        x            = torch.reshape(x, [-1, 29, 32])                   # [bs*seq_len, 29, 32]
-        x            = self.epoch_rnn(x)                                # [bs*seq_len, 29, 64*2]
+        x          = torch.reshape(x, [-1, 129])                      # [bs, seq_len*29, 129]
+        filterbank = torch.mul(self.filterweight, self.filterbanks)   # [129, 32]
+        x          = torch.matmul(x, filterbank)                      # [bs, seq_len*29, 32]
+        x          = torch.reshape(x, [-1, 29, 32])                   # [bs*seq_len, 29, 32]
+        x          = self.epoch_rnn(x)                                # [bs*seq_len, 29, 64*2]
 
         # above is epoch-wise learning, below is seq-wise learning
 
