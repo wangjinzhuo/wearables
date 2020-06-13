@@ -16,5 +16,7 @@ pip3 install -r requirements.txt
 <b># original paper references
 
 dsn: https://arxiv.org/pdf/1703.04046.pdf
+
 seqsleepnet: https://arxiv.org/pdf/1809.10932.pdf
+
 utime: https://arxiv.org/pdf/1910.11162.pdf
