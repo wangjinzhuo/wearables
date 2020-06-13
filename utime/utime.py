@@ -144,17 +144,17 @@ class Utime(nn.Module):
         x = self.decoder_b1(enc_5)
         x = crop_conc(x, enc_4) # the second one is larger - 1296
 
-        x = self.decoder_b2(x) # output 1295,  expected BS, 64, 1296
+        x = self.decoder_b2(x)
 
         x = manually_pad(x, 1296)
         x = crop_conc(x, enc_3)
 
-        x = self.decoder_b3(x) # output 10365, expected BS, 64, 10368
+        x = self.decoder_b3(x)
 
         x = manually_pad(x, 10368)
         x = crop_conc(x, enc_2)
 
-        x = self.decoder_b4(x) # 103675, expected BS, 64, 103680
+        x = self.decoder_b4(x)
 
         x = manually_pad(x, 103680)
         x = crop_conc(x, enc_1)
@@ -165,7 +165,6 @@ class Utime(nn.Module):
         x = x.view(-1, 5, 3000, 35)
 
         x = torch.mean(x, dim=2)
-        print(x.size())
         x = self.final_conv(x)
 
         return x

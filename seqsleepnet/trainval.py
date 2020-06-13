@@ -28,8 +28,8 @@ start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 print("preparing loader ...")
 train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_5.pt')
 val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
-train_loader = make_seq_loader(train_loader, seq_len=20, stride=40)
-val_loader   = make_seq_loader(val_loader, seq_len=20, stride=40)
+train_loader = make_seq_loader(train_loader, seq_len=20, stride=1)
+val_loader   = make_seq_loader(val_loader, seq_len=20, stride=1)
 
 tr_y, val_y  = train_loader.dataset.tensors[1], val_loader.dataset.tensors[1]
 print('training sample: ', tr_y.size(0))
