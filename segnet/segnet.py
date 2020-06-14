@@ -39,7 +39,7 @@ class Snet(nn.Module):
             nn.Linear(3904, 512),
             nn.Linear(512, 128)
         )
-        self.cls = Parabit(128, 2)
+        self.cls = Parabit(128, 1, 2)
 
     def forward(self, x):
         features = self.features(x)
@@ -57,7 +57,7 @@ class Pnet(nn.Module):
             #nn.Linear(4096, 1024),
             #nn.Linear(1024, 128)
         )
-        self.cls = Parabit(128, 5)
+        self.cls = Parabit(128, 1, 5)
     def forward(self, x):
         features  = self.features(x)
         out       = self.cls(features)
@@ -65,11 +65,11 @@ class Pnet(nn.Module):
 
 
 class Parabit(nn.Module):
-    def __init__(self, seq_len, class_num):
+    def __init__(self, seq_len, dim, class_num):
         super(Parabit, self).__init__()
         self.bits = []
         for i in range(seq_len):
-            bit = nn.Linear(1, class_num)
+            bit = nn.Linear(dim, class_num)
             bit_name = 'seq_at_%d' % i
             setattr(self, bit_name, bit)
             self.bits.append(getattr(self, bit_name))
@@ -100,7 +100,7 @@ class Fc(nn.Module):
             nn.Flatten(),
             nn.Linear(4096, 1024),
             nn.Linear(1024, 128),
-            Parabit(128, 5),
+            Parabit(128, 1, 5),
         )
     def forward(self, x):
         x = self.cls(x)
