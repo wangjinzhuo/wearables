@@ -53,7 +53,7 @@ if args.resume:
     start_epoch = checkpoint["epoch"]
     print("best acc: ", best_acc)
 
-optimizer = optim.Adam(net.parameters(), lr=5e-4, betas=(0.9, 0.999), eps=1e-8)
+optimizer = optim.Adam(net.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-8)
 
 # Training
 def train(epoch):
