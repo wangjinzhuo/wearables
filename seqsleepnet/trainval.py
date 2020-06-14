@@ -13,23 +13,22 @@ import argparse
 from utils import *
 from seqsleepnet import *
 
-def parse_cmd_args():
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument("--resume", "-r", action="store_true", help="resume from checkpoint")
-    args = parser.parse_args()
-    return args
-
-args = parse_cmd_args()
+parser = argparse.ArgumentParser(description='prepare args')
+parser.add_argument("--resume", "-r", action="store_true", help="resume from checkpoint")
+parser.add_argument("--loss", default='ce')
+args = parser.parse_args()
 
 device      = "cuda" if torch.cuda.is_available() else "cpu"
 best_acc    = 0 # best val accuracy
 start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
+loss_criterion = seq_cel if args.loss == 'ce' else gdl
+
 print("preparing loader ...")
-train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_5.pt')
-val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
-train_loader = make_seq_loader(train_loader, seq_len=20, stride=1)
-val_loader   = make_seq_loader(val_loader, seq_len=20, stride=1)
+train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
+val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_3.pt')
+train_loader = make_seq_loader(train_loader, seq_len=20, stride=14)
+val_loader   = make_seq_loader(val_loader, seq_len=20, stride=14)
 
 tr_y, val_y  = train_loader.dataset.tensors[1], val_loader.dataset.tensors[1]
 print('training sample: ', tr_y.size(0))
@@ -54,7 +53,7 @@ if args.resume:
     start_epoch = checkpoint["epoch"]
     print("best acc: ", best_acc)
 
-optimizer = optim.Adam(net.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-8)
+optimizer = optim.Adam(net.parameters(), lr=5e-4, betas=(0.9, 0.999), eps=1e-8)
 
 # Training
 def train(epoch):
@@ -75,7 +74,7 @@ def train(epoch):
         outputs = net(inputs)
 
         outputs = outputs.transpose(2, 1)
-        loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
+        loss, correct_batch, total_batch = loss_criterion(outputs, targets, outputs.size(1))
         loss.backward()
         optimizer.step()
         train_loss += loss.item()
@@ -102,7 +101,7 @@ def val(epoch):
             targets = targets.to(device, dtype=torch.long)
             outputs = net(inputs)
             outputs = outputs.transpose(2, 1)
-            loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
+            loss, correct_batch, total_batch = loss_criterion(outputs, targets, outputs.size(1))
             correct  += correct_batch
             total    += total_batch
             val_loss += loss.item()
@@ -125,7 +124,7 @@ def val(epoch):
         best_acc = acc
 
 lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
-for epoch in range(start_epoch, start_epoch+400):
+for epoch in range(start_epoch, start_epoch+1000):
     train(epoch)
     val(epoch)
     lr_scheduler.step()

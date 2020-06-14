@@ -132,6 +132,14 @@ def make_sleep_edf_dataloader(dataset_dir, batch_size):
     dataloader = DataLoader(dataset, batch_size=batch_size)
     return dataloader
 
+def seq_cel(pred, gt, class_num):
+    # seq cross entropy loss
+    criterion= nn.CrossEntropyLoss()
+    loss  = criterion(pred, gt)
+    total = torch.numel(gt)
+    corr  = torch.sum(torch.eq(pred.max(1)[1], gt)).item()
+    return loss, corr, total
+
 def gdl(pred, gt, class_num):
     # generalized dice loss
     # pred: bs, class_num, seq_len
