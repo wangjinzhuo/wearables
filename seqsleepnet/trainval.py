@@ -25,10 +25,10 @@ start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 loss_criterion = seq_cel if args.loss == 'ce' else gdl
 
 print("preparing loader ...")
-train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
-val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_3.pt')
-train_loader = make_seq_loader(train_loader, seq_len=20, stride=14)
-val_loader   = make_seq_loader(val_loader, seq_len=20, stride=14)
+train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/stft/ss_2.pt')
+val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/stft/ss_3.pt')
+train_loader = make_seq_stft_loader(train_loader, seq_len=20, stride=5)
+val_loader   = make_seq_stft_loader(val_loader, seq_len=20, stride=5)
 
 tr_y, val_y  = train_loader.dataset.tensors[1], val_loader.dataset.tensors[1]
 print('training sample: ', tr_y.size(0))
@@ -64,10 +64,6 @@ def train(epoch):
     total = 0
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
-        if inputs.size(2) != 3000:
-            idx    = list(range(0,6000,2))
-            inputs = inputs[:,:,idx]
-        inputs  = preprocessing(inputs)
         inputs  = inputs.to(device, dtype=torch.float)
         targets = targets.to(device, dtype=torch.long)
         optimizer.zero_grad()
@@ -93,10 +89,6 @@ def val(epoch):
     total = 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(val_loader):
-            if inputs.size(2) != 3000:
-                idx    = list(range(0,6000,2))
-                inputs = inputs[:,:,idx]
-            inputs  = preprocessing(inputs)
             inputs  = inputs.to(device, dtype=torch.float)
             targets = targets.to(device, dtype=torch.long)
             outputs = net(inputs)
@@ -120,7 +112,7 @@ def val(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt.pth')
+        torch.save(state, './checkpoint/stft_ckpt.pth')
         best_acc = acc
 
 lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)

@@ -180,6 +180,22 @@ def gdl(pred, gt, class_num):
 
     return loss, corr, total
 
+def make_seq_stft_loader(loader, seq_len, stride):
+    # input : loader of size [#n, 1, 29, 129], [#n]
+    # return: loader of size [#n, seq_len, 29, 129], [#n]
+
+    x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
+    dim    = x.shape[-1]
+    idx    = gen_seq(x.shape[0], seq_len, stride)
+    xx, yy = [x[i:i+seq_len, :, :, :] for i in idx], [y[i:i+seq_len] for i in idx]
+    xx     = [x.reshape(1, seq_len, x.shape[2], x.shape[3]) for x in xx]
+    yy     = [y.unsqueeze(0) for y in yy]
+
+    xx, yy = torch.cat(xx), torch.cat(yy)
+    dataset= TensorDataset(xx, yy)
+    loader = DataLoader(dataset, batch_size=loader.batch_size)
+    return loader
+
 def make_seq_loader(loader, seq_len, stride):
     # input : loader of size [#n, 1, #dim], [#n]
     # return: loader of size [#n, seq_len, #dim], [#n]
