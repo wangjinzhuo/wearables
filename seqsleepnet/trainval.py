@@ -25,8 +25,8 @@ start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 loss_criterion = seq_cel if args.loss == 'ce' else gdl
 
 print("preparing loader ...")
-train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/stft/ss_2.pt')
-val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/stft/ss_3.pt')
+train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/stft/ss_1.pt')
+val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/stft/ss_2.pt')
 train_loader = make_seq_stft_loader(train_loader, seq_len=20, stride=5)
 val_loader   = make_seq_stft_loader(val_loader, seq_len=20, stride=5)
 
@@ -53,7 +53,7 @@ if args.resume:
     start_epoch = checkpoint["epoch"]
     print("best acc: ", best_acc)
 
-optimizer = optim.Adam(net.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-8)
+optimizer = optim.Adam(net.parameters(), lr=1e-5, betas=(0.9, 0.999), eps=1e-8)
 
 # Training
 def train(epoch):
