@@ -103,6 +103,29 @@ def preprocessing(x):
     out = out.type(torch.float)
     return out
 
+def prepare_stft_loader(loader_dir):
+    loaders = []
+    for root, dirs, files in os.walk(loader_dir):
+        if files:
+            for file_ in files:
+                loaders.append(os.path.join(loader_dir, root, str(file_)))
+
+    for loader in loaders:
+        slash   = loader.split('/')
+        subdir  = '/'.join(str(x) for x in slash[:-1])+'/stft'
+        if not os.path.isdir(subdir):
+            os.mkdir(subdir)
+
+        df      = torch.load(loader)
+        x, y    = df.dataset.tensors[0], df.dataset.tensors[1]
+        idx     = list(range(0, 6000, 2))
+        x       = x[:, :, idx]
+        x       = preprocessing(x)
+        dataset = TensorDataset(x, y)
+        loader_ = DataLoader(dataset, batch_size=df.batch_size)
+
+        torch.save(loader_, subdir+'/'+slash[-1])
+
 def combine_loader(loader_list):
     xlist, ylist = [], []
     for loader in loader_list:
