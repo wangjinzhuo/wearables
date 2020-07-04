@@ -21,6 +21,7 @@ def parse_cmd_args():
     parser.add_argument("--step1_num",   default=500, help="step1 epoch number")
     parser.add_argument("--step2_num",   default=500, help="step2 epoch number")
     parser.add_argument("--train_stage", default=12,  help="select train stage")
+    parser.add_argument("--ch_num",      default=4,   help="input channel number")
     args = parser.parse_args()
     return args
 
@@ -33,8 +34,12 @@ step1_start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 step2_start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
 print("preparing train and validation dataloader ...")
-train_loader     = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_1.pt')
-val_loader       = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
+path             = '/media/jinzhuo/wjz/Data/Navin (RBD)/rbd_loader/tmp'
+fs               = os.listdir(path)
+ch_num           = args.ch_num
+loaders          = [torch.load(path + '/' + f) for f in fs]
+train_loader     = combine_loader(loaders[:3], ch_num=ch_num)
+val_loader       = combine_loader(loaders[3:], ch_num=ch_num)
 train_loader     = make_seq_loader(train_loader, seq_len=128, stride=64)
 val_loader       = make_seq_loader(val_loader, seq_len=128, stride=64)
 bin_train_loader = make_bin_loader(train_loader)
@@ -42,7 +47,7 @@ bin_val_loader   = make_bin_loader(val_loader)
 
 print("finish preparing train and validation dataloader ...")
 
-step1_bnet, step2_bnet, snet, pnet = Bnet(ch=1), Bnet(ch=1), Snet(), Pnet()
+step1_bnet, step2_bnet, snet, pnet = Bnet(ch=4), Bnet(ch=4), Snet(), Pnet()
 step1_bnet, step2_bnet, snet, pnet = step1_bnet.to(device), step2_bnet.to(device), snet.to(device), pnet.to(device)
 if device == "cuda":
     step1_bnet, step2_bnet, snet, pnet = nn.DataParallel(step1_bnet), nn.DataParallel(step2_bnet), nn.DataParallel(snet), nn.DataParallel(pnet)
@@ -80,7 +85,7 @@ def step1_train(epoch):
     for batch_idx, (inputs, targets) in enumerate(bin_train_loader):
         inputs  = inputs.to(device, dtype=torch.float)
         targets = targets.to(device, dtype=torch.long)
-        #print(inputs.size(), targets.size()) # bs, 1, dim*128;  bs, 128
+        #print(inputs.size(), targets.size()) # bs, #ch, dim*128;  bs, 128
         if inputs.size(2) != 128*3000:
             idx    = list(range(0,6000*128,2))
             inputs = inputs[:,:,idx]

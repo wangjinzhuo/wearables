@@ -43,6 +43,7 @@ class Snet(nn.Module):
 
     def forward(self, x):
         features = self.features(x)
+        print(features.shape)
         out      = self.cls(features)
         return out
 
@@ -67,6 +68,7 @@ class Pnet(nn.Module):
 class Parabit(nn.Module):
     def __init__(self, seq_len, dim, class_num):
         super(Parabit, self).__init__()
+        self.len = seq_len
         self.bits = []
         for i in range(seq_len):
             bit = nn.Linear(dim, class_num)
@@ -75,7 +77,13 @@ class Parabit(nn.Module):
             self.bits.append(getattr(self, bit_name))
 
     def forward(self, x):
-        bit_fcs    = [bit(x) for bit in self.bits]
+        x = x.unsqueeze(1)
+        x = x.transpose(2,1)
+        bit_fcs = []
+        for i in range(self.len):
+            fc = self.bits[i]
+            x_ = x[:,i,:]
+            bit_fcs.append(fc(x_))
         torch_bits = [bits.unsqueeze(1) for bits in bit_fcs]
         torch_bits = torch.cat(torch_bits, 1) # bs, seq_len, class_num
         return torch_bits
@@ -96,7 +104,7 @@ def seg_pool(x, segment):
 class Fc(nn.Module):
     def __init__(self):
         super(Fc, self).__init__()
-        self.cls = nn.Sequential( nn.MaxPool1d(16), #nn.Linear(4096*16, 4096),
+        self.cls = nn.Sequential(nn.MaxPool1d(16), #nn.Linear(4096*16, 4096),
             nn.Flatten(),
             nn.Linear(4096, 1024),
             nn.Linear(1024, 128),

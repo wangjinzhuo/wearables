@@ -27,10 +27,12 @@ print("-------start data preparation----------")
 
 start_time = time.time()
 
-ch_0_loader_list = [torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_'+str(ss)+'.pt') for ss in range(1, 6, 1)]
+path = '/media/jinzhuo/wjz/Data/Navin (RBD)/rbd_loader'
+fs = os.listdir(path)
+loader_list = [torch.load(path+'/'+f) for f in fs]
 
-trainloader = combine_loader(ch_0_loader_list[:1])
-valloader   = combine_loader(ch_0_loader_list[-1:])
+trainloader = combine_loader(loader_list[:14])
+valloader   = combine_loader(loader_list[14:])
 
 tr_y, val_y = trainloader.dataset.tensors[1], valloader.dataset.tensors[1]
 print('train num: ', tr_y.size(0))
@@ -39,11 +41,8 @@ print('valid num: ', val_y.size(0))
 print("-------%s seconds for data preparation----------" % (time.time() - start_time))
 
 print("building model...")
-net = DeepSleepNet(ch=1)
+net = DeepSleepNet(ch=4)
 net = net.to(device)
-if device == "cuda":
-    net = nn.DataParallel(net)
-    cudnn.benchmark = True
 
 if args.resume:
     # load checkpoint

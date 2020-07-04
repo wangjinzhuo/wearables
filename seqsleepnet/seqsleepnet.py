@@ -45,6 +45,7 @@ class Parabit(nn.Module):
             self.bits.append(getattr(self, bit_name))
 
     def forward(self, x):
+        print(x.shape)
         bit_fcs = []
         for i in range(self.seq_len):
             xx = x[:,i,:]
@@ -115,5 +116,8 @@ if __name__ == '__main__':
         sum(torch.numel(p) for p in params)
         )
     )
+    '''
     for name, param in net.named_parameters():
         print(name, param.shape)
+
+    '''

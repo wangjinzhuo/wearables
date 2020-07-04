@@ -20,6 +20,18 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 
+def combine_loader(loader_list, ch_num):
+    xlist, ylist = [], []
+    for loader in loader_list:
+        x, y = loader.dataset.tensors[0], loader.dataset.tensors[1]
+        xlist.append(x[:,:ch_num,:]), ylist.append(y)
+    x, y = torch.cat(xlist, 0), torch.cat(ylist, 0)
+    dataset = TensorDataset(x, y)
+    loader = DataLoader(dataset, batch_size=loader_list[0].batch_size)
+
+    return loader
+
+
 def gdl(pred, gt, class_num):
     # generalized dice loss
     # pred: bs, seq_len, class_num
@@ -38,6 +50,7 @@ def gdl(pred, gt, class_num):
 
 def make_bin_loader(loader):
     x, y = loader.dataset.tensors[0], loader.dataset.tensors[1]
+    print(x.shape, y.shape)
     if torch.numel(y) == y.size(0):
         bin_y = convert_class_to_bin(y)
     else:
