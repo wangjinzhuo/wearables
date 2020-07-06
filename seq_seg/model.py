@@ -6,10 +6,10 @@
     Original SeqSleepNet implmentation includes following steps:
     input x [bs, seq_len, 30*100]
     1: send x to time-frequency representation obtaining  x: [bs, seq_len, 29, 129] # 29 = 1 + (Fs*30-Fs*frame_size)/(Fs*frame_stride), 129 = 1 + NFFT/2
-    2: send x to filterbank obtaining                     x: [bs, seq_len, 29, 32]  # (29,129)*(129,32) = (29,32)
-    3: reshape                                            x: [bs*seq_len,  29, 32]   #
-    4: send x to biRNN obtaining                          x: [bs*seq_len,  29, 64*2]
-    5: send x to an attention layer obtaining             x: [bs*seq_len,  64*2]
+    2: send x to filterbank obtaining                     x: [bs, seq_len, 29, 32]  #
+    3: reshape                                            x: [bs*seq_len, 29, 32]   # (29,129)*(129,32) = (29,32)
+    4: send x to biRNN obtaining                          x: [bs*seq_len, 29, 64*2]
+    5: send x to an attention layer obtaining             x: [bs*seq_len, 64*2]
     6: reshape                                            x: [bs, seq_len, 64*2]
     7: send x to biRNN obtaining                          x: [bs, seq_len, 64*2]
     8: send x to seq_len of fc layers obtaining           x: [bs, seq_len, class_num]
@@ -61,6 +61,7 @@ class SeqSleepNet(nn.Module):
     def __init__(self, filterbanks, ch_num, seq_len=20, class_num=5):
         super(SeqSleepNet, self).__init__()
         self.seq_len      = seq_len
+        self.ch_num       = ch_num
         self.class_num    = class_num
         self.filterbanks  = filterbanks
 
@@ -101,14 +102,17 @@ class SeqSleepNet(nn.Module):
 
 if __name__ == '__main__':
     batch_size = 2
-    seq_len    = 20
+    seq_len    = 128
     class_num  = 5
-    ch_num     = 2
-    filterbanks= torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
-    net        = SeqSleepNet(filterbanks=filterbanks, ch_num=ch_num, seq_len=seq_len, class_num=class_num)
-    net        = net.cuda()
-    inputs     = torch.rand(batch_size, seq_len, int(100*30)) # [bs, seq_len, 30*100]
+    ch_num     = 4
+    inputs     = torch.rand(batch_size, seq_len, ch_num, int(100*30)) # [bs, seq_len, 30*100]
     inputs     = preprocessing(inputs) # [bs, seq_len, 29, 129]
+    print(inputs.shape)
+    '''
+    filterbanks= torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
+    net        = SeqSleepNet(filterbanks=filterbanks, seq_len=seq_len, class_num=class_num)
+    net        = net.cuda()
+
     inputs     = inputs.cuda()
     outputs    = net(inputs) # [bs, seq_len, class_num]
     params     = list(net.parameters())
@@ -117,7 +121,6 @@ if __name__ == '__main__':
         sum(torch.numel(p) for p in params)
         )
     )
-    '''
     for name, param in net.named_parameters():
         print(name, param.shape)
 

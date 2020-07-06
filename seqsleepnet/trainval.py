@@ -37,7 +37,7 @@ print('valid sample: ', val_y.size(0))
 print("finish ...")
 
 filterbanks  = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda()
-net = SeqSleepNet(filterbanks=filterbanks, seq_len=20, class_num=5)
+net = SeqSleepNet(filterbanks=filterbanks, ch_num=1, seq_len=20, class_num=5)
 net = net.to(device)
 if device == "cuda":
     net = nn.DataParallel(net)
