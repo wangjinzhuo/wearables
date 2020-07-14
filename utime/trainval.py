@@ -41,8 +41,13 @@ if args.resume:
 optimizer = optim.SGD(net.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-4)
 #optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
 
-tr_path   = '/media/jinzhuo/wjz/Data/Navin_RBD/tr'
-val_path  = '/media/jinzhuo/wjz/Data/Navin_RBD/val'
+path   = '/mnt/ibme_cibim/Projects_1/RBD-Wearables/raw/RBD_study2018/Navin (RBD)'
+fs     = os.listdir(path)
+random.shuffle(fs)
+tr       = fs[:int(len(fs)*0.6)]
+val      = fs[int(len(fs)*0.6):int(len(fs)*0.8)]
+tr_path  = [os.path.join(path, f) for f in tr]
+val_path = [os.path.join(path, f) for f in val]
 
 # Training
 def train(epoch):
@@ -80,7 +85,7 @@ def train(epoch):
             assert correct_batch <= total_batch, print('error ... c: %d, t: %d' % (correct_batch, total_batch))
             correct    += correct_batch
             total      += total_batch
-            print(int(b/32), ' | ', '{:.4f}'.format(loss.item()), ' | ', '{:.2f}'.format(100.*correct/total), ' | ', correct, ' | ', total)
+            print('tr: ', int(b/32), ' | ', '{:.4f}'.format(loss.item()), ' | ', '{:.2f}'.format(100.*correct/total), ' | ', correct, ' | ', total)
 
 # Validataion
 def val(epoch):
@@ -118,7 +123,7 @@ def val(epoch):
                 correct  += correct_batch
                 total    += total_batch
                 assert correct_batch <= total_batch, print('error ... c: %d, t: %d' % (correct_batch, total_batch))
-                print(int(b/32), ' | ', '{:.4f}'.format(loss.item()), ' | ', '{:.2f}'.format(100.*correct/total), ' | ', correct, ' | ', total)
+                print('val: ', int(b/32), ' | ', '{:.4f}'.format(loss.item()), ' | ', '{:.2f}'.format(100.*correct/total), ' | ', correct, ' | ', total)
                 #progress_bar(idx, len(loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 #         % (val_loss/(idx+1), 100.*correct/total, correct, total))
 
@@ -134,7 +139,7 @@ def val(epoch):
                 }
                 if not os.path.isdir('checkpoint'):
                     os.mkdir('checkpoint')
-                torch.save(state, './checkpoint/stft_ckpt.pth')
+                torch.save(state, './checkpoint/ckpt.pth')
                 best_acc = acc
 
 lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
