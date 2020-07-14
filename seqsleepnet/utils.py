@@ -86,20 +86,25 @@ def stft(signal, sample_rate=100, frame_size=2, frame_stride=1, winfunc=np.hammi
     return pow_frames
 
 def preprocessing(x):
-    # x [bs, seq_len, 30*100]
-    # return [bs, seq_len, 29, 129]
-    ilist = []
-    for i in range(x.shape[0]):
-        jlist = []
-        for j in range(x.shape[1]):
-            a = stft(x[i,j,:])
-            b = torch.from_numpy(a)
-            c = torch.unsqueeze(b, 0)
-            jlist.append(c)
-        jout = torch.cat(jlist, 0) # [seq_len, 29, 129]
-        jout = torch.unsqueeze(jout, 0)
-        ilist.append(jout)
-    out = torch.cat(ilist, 0) # out [bs, seq_len, 29, 129]
+    # x [bs, seq_len, ch, 30*100]
+    # return [bs, seq_len, ch, 29, 129]
+    bslist = []
+    for b in range(x.shape[0]):
+        seqlist = []
+        for s in range(x.shape[1]):
+            chlist = []
+            for c in range(x.shape[2]):
+                tmp = stft(x[b,s,c,:])
+                tmp = torch.from_numpy(tmp)
+                tmp = torch.unsqueeze(tmp, 0)
+                chlist.append(tmp)
+            chout = torch.cat(chlist, 0) # [ch, 29, 129]
+            chout = torch.unsqueeze(chout, 0) # [1, ch, 29, 129]
+            seqlist.append(chout)
+        seqout = torch.cat(seqlist, 0)
+        seqout = seqout.unsqueeze(0)
+        bslist.append(seqout)
+    out = torch.cat(bslist, 0) # out [bs, seq_len, 29, 129]
     out = out.type(torch.float)
     return out
 

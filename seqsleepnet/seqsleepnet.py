@@ -56,14 +56,14 @@ class Parabit(nn.Module):
         return torch_bits
 
 class SeqSleepNet(nn.Module):
-
-    def __init__(self, filterbanks, seq_len=20, class_num=5):
+    def __init__(self, filterbanks, ch_num, seq_len=20, class_num=5):
         super(SeqSleepNet, self).__init__()
         self.seq_len      = seq_len
+        self.ch_num       = ch_num
         self.class_num    = class_num
         self.filterbanks  = filterbanks
 
-        self.filterweight = Parameter(torch.randn(129, 32))
+        self.filterweight = Parameter(torch.randn(ch_num, 129, 32))
         self.epoch_rnn    = BiGRU(32, 64, 1)
 
         self.attweight_w  = Parameter(torch.randn(128, 64))
@@ -78,11 +78,21 @@ class SeqSleepNet(nn.Module):
         # return: [bs, seq_len, class_num]
 
         # torch.mul -> element-wise dot;  torch.matmul -> matrix multiplication
-        x          = torch.reshape(x, [-1, 129])                      # [bs, seq_len*29, 129]
-        filterbank = torch.mul(self.filterweight, self.filterbanks)   # [129, 32]
-        x          = torch.matmul(x, filterbank)                      # [bs, seq_len*29, 32]
-        x          = torch.reshape(x, [-1, 29, 32])                   # [bs*seq_len, 29, 32]
-        x          = self.epoch_rnn(x)                                # [bs*seq_len, 29, 64*2]
+        #x          = torch.reshape(x, [-1, self.ch_num, 129])         # [bs*seq_len*29*ch_num, 129]
+        filterbank = torch.mul(self.filterweight, self.filterbanks)   # [ch_num, 129, 32]
+        tmp = []
+        for i in range(self.ch_num):
+            xx = x[:,:,i,:,:]
+            xx = torch.reshape(xx, [-1,129])
+            fb = filterbank[i,:,:]
+            c = torch.matmul(xx,fb)
+            c = c.unsqueeze(0)
+            tmp.append(c)
+        x = torch.cat(tmp)
+        x = x.mean(0)                      # [bs*seq_len*29, 32]
+        x = torch.reshape(x, [-1, 29, 32]) # [bs*seq_len, 29, 32]
+        print(x.shape)
+        x = self.epoch_rnn(x)              # [bs*seq_len, 29, 64*2]
 
         # above is epoch-wise learning, below is seq-wise learning
 
@@ -92,6 +102,7 @@ class SeqSleepNet(nn.Module):
         alphas = exps / torch.reshape(torch.sum(exps, 1), [-1, 1])            # [bs*seq_len, 1]
         x      = torch.sum(torch.mul(x, torch.reshape(exps, [-1, 29, 1])), 1) # [bs*seq_len, 29, 64*2]*[bs*seq_len, 29, 1] -> [bs*seq_len, 29, 64*2] -> [bs*seq_len, 64*2]
 
+        print(x.shape)
         x = torch.reshape(x, [-1, self.seq_len, 64*2]) # [bs, seq_len, 64*2]
         x = self.seq_rnn(x)                            # [bs, seq_len, 64*2]
         x = self.cls(x)                                # [bs, seq_len, 5]
@@ -102,13 +113,14 @@ if __name__ == '__main__':
     batch_size = 25
     seq_len    = 128
     class_num  = 5
-    ch_num     = 2
+    ch_num     = 4
     filterbanks= torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda() # [129, 32]
-    #net        = SeqSleepNet(filterbanks=filterbanks, ch_num=ch_num, seq_len=seq_len, class_num=class_num)
-    net        = SeqSleepNet(filterbanks=filterbanks, seq_len=seq_len, class_num=class_num)
+    net        = SeqSleepNet(filterbanks=filterbanks, ch_num=ch_num, seq_len=seq_len, class_num=class_num)
+    #net        = SeqSleepNet(filterbanks=filterbanks, seq_len=seq_len, class_num=class_num)
     net        = net.cuda()
-    inputs     = torch.rand(batch_size, seq_len, int(100*30)) # [bs, seq_len, 30*100]
+    inputs     = torch.rand(batch_size, seq_len, ch_num, int(100*30)) # [bs, seq_len, 30*100]
     inputs     = preprocessing(inputs) # [bs, seq_len, 29, 129]
+    print(inputs.shape)
     inputs     = inputs.cuda()
     outputs    = net(inputs) # [bs, seq_len, class_num]
     params     = list(net.parameters())
