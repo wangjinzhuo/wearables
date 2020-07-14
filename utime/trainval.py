@@ -53,10 +53,9 @@ val_path = [os.path.join(path, f) for f in val]
 def train(epoch):
     print('Train - epoch: %d' % epoch)
     net.train()
-    fs = os.listdir(tr_path)
-    for f in fs:
+    for f in tr_path:
         print(f)
-        mat = loadmat(os.path.join(tr_path, f))
+        mat = loadmat(f)
         x, y = mat['data'], mat['labels']
         x    = x.transpose(0,2,1)
         x    = x[:,:,0:-1:2]
@@ -92,11 +91,10 @@ def val(epoch):
     print('Val - Epoch: %d' % epoch)
     global best_acc
     net.eval()
-    fs = os.listdir(val_path)
     with torch.no_grad():
-        for f in fs:
+        for f in val_path:
             print(f)
-            mat = loadmat(os.path.join(val_path, f))
+            mat = loadmat(f)
             x, y = mat['data'], mat['labels']
             x    = x.transpose(0,2,1)
             x    = x[:,:,0:-1:2]
