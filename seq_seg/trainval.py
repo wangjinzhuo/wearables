@@ -9,227 +9,87 @@ import time
 import math
 import random
 import argparse
-import itertools
 
 from utils import *
-from segnet import *
+from model import *
 
-def parse_cmd_args():
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument("--resume",      action="store_true", help="resume from checkpoint")
-    parser.add_argument("--iter_num",    default=2,   help="step1 epoch number")
-    parser.add_argument("--step1_num",   default=500, help="step1 epoch number")
-    parser.add_argument("--step2_num",   default=500, help="step2 epoch number")
-    parser.add_argument("--train_stage", default=12,  help="select train stage")
-    parser.add_argument("--ch_num",      default=4,   help="input channel number")
-    args = parser.parse_args()
-    return args
+torch.cuda.empty_cache()
 
-args = parse_cmd_args()
-device = "cuda" if torch.cuda.is_available() else "cpu"
+parser = argparse.ArgumentParser(description='prepare args')
+parser.add_argument("--resume", "-r", action="store_true", help="resume from checkpoint")
+parser.add_argument("--loss", default='ce')
+args = parser.parse_args()
 
-step1_best_acc    = 0 # best step1 val accuracy
-step2_best_acc    = 0 # best step2 val accuracy
-step1_start_epoch = 0 # start from epoch 0 or last checkpoint epoch
-step2_start_epoch = 0 # start from epoch 0 or last checkpoint epoch
+device      = "cuda" if torch.cuda.is_available() else "cpu"
+best_acc    = 0 # best val accuracy
+start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
-print("preparing train and validation dataloader ...")
-path             = '/media/jinzhuo/wjz/Data/Navin (RBD)/rbd_loader/tmp'
-fs               = os.listdir(path)
-ch_num           = args.ch_num
-loaders          = [torch.load(path + '/' + f) for f in fs]
-train_loader     = combine_loader(loaders[:3], ch_num=ch_num)
-val_loader       = combine_loader(loaders[3:], ch_num=ch_num)
-train_loader     = make_seq_loader(train_loader, seq_len=128, stride=64)
-val_loader       = make_seq_loader(val_loader, seq_len=128, stride=64)
-bin_train_loader = make_bin_loader(train_loader)
-bin_val_loader   = make_bin_loader(val_loader)
 
-print("finish preparing train and validation dataloader ...")
+print("preparing loader ...")
+path = '/media/jinzhuo/wjz/Data/Navin (RBD)/rbd_loader/seq_loader/stft/'
+loader_list  = os.listdir(path)
+#train_loader = torch.load(path + loader_list[0])
+#val_loader   = torch.load(path + loader_list[1])
+filterbanks  = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda()
+net = Bnet(filterbanks=filterbanks, ch_num=4, seq_len=128, class_num=5)
+net = net.to(device)
+print("finish ...")
 
-step1_bnet, step2_bnet, snet, pnet = Bnet(ch=4), Bnet(ch=4), Snet(), Pnet()
-step1_bnet, step2_bnet, snet, pnet = step1_bnet.to(device), step2_bnet.to(device), snet.to(device), pnet.to(device)
-if device == "cuda":
-    step1_bnet, step2_bnet, snet, pnet = nn.DataParallel(step1_bnet), nn.DataParallel(step2_bnet), nn.DataParallel(snet), nn.DataParallel(pnet)
-    cudnn.benchmark = True
+loss_criterion = seq_cel if args.loss == 'ce' else gdl
+optimizer = optim.Adam(net.parameters(), lr=1e-5, betas=(0.9, 0.999), eps=1e-8)
 
 if args.resume:
     # load checkpoint
     print("resuming from checkpoint")
     assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found"
-    checkpoint = torch.load("./checkpoint/step1_bnet.pth")
-    step1_bnet.load_state_dict(checkpoint["net"])
-    step1_start_epoch = checkpoint["epoch"]
-    step1_best_acc    = checkpoint["acc"]
+    checkpoint = torch.load("./checkpoint/stft_ckpt.pth")
+    net.load_state_dict(checkpoint["net"])
+    best_acc = checkpoint["acc"]
+    start_epoch = checkpoint["epoch"]
+    print("best acc: ", best_acc)
 
-    checkpoint = torch.load("./checkpoint/snet.pth")
-    snet.load_state_dict(checkpoint["net"])
 
-    '''
-    checkpoint = torch.load("./checkpoint/step2_bnet.pth")
-    step2_bnet.load_state_dict(checkpoint["net"])
-    '''
+'''
+# Training
+def train(epoch):
+    print('Train - Epoch: %d' % epoch)
+    net.train()
+    train_loss = 0
+    correct = 0
+    total = 0
 
-    checkpoint = torch.load("./checkpoint/pnet.pth")
-    pnet.load_state_dict(checkpoint["net"])
-    step2_start_epoch = checkpoint["epoch"]
-    step2_best_acc    = checkpoint["acc"]
-
-# step1 - training
-def step1_train(epoch):
-    print('Step 1: Train - Epoch: {}'.format(epoch))
-    step1_bnet.train()
-    snet.train()
-
-    train_loss, correct, total = 0, 0, 0
-    for batch_idx, (inputs, targets) in enumerate(bin_train_loader):
-        inputs  = inputs.to(device, dtype=torch.float)
-        targets = targets.to(device, dtype=torch.long)
-        #print(inputs.size(), targets.size()) # bs, #ch, dim*128;  bs, 128
-        if inputs.size(2) != 128*3000:
-            idx    = list(range(0,6000*128,2))
-            inputs = inputs[:,:,idx]
-        step1_optimizer.zero_grad()
-        bout = step1_bnet(inputs) # bs, seq_len, class_num
-        sout = snet(bout) # bs, seq_len, class_num
-
-        loss, correct_batch, total_batch = gdl(sout, targets, sout.size(2))
-        loss.backward()
-        step1_optimizer.step()
-
-        train_loss += loss.item()
-        correct    += correct_batch
-        total      += total_batch
-        progress_bar(batch_idx, len(bin_train_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                         % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
-
-# step1 - validataion
-def step1_val(epoch):
-    print('Step 1: Valid - Epoch: {}'.format(epoch))
-    global step1_best_acc
-    step1_bnet.eval()
-    snet.eval()
-
-    val_loss, correct, total = 0, 0, 0
-    with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(bin_val_loader):
-            inputs  = inputs.to(device, dtype=torch.float)
-            targets = targets.to(device, dtype=torch.long)
-            if inputs.size(2) != 128*3000:
-                idx    = list(range(0,6000*128,2))
-                inputs = inputs[:,:,idx]
-            bout = step1_bnet(inputs)
-            sout = snet(bout)
-
-            loss, correct_batch, total_batch = gdl(sout, targets, sout.size(2))
-
-            correct  += correct_batch
-            total    += total_batch
-            val_loss += loss.item()
-            progress_bar(batch_idx, len(bin_val_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                         % (val_loss/(batch_idx+1), 100.*correct/total, correct, total))
-
-    # Save checkpoint.
-    acc = 100.*correct/total
-    if acc > step1_best_acc:
-        print('Saving step1_bnet, snet ...')
-        print(acc)
-        b_state = {
-            'net': step1_bnet.state_dict(),
-            'acc': acc,
-            'epoch': epoch,
-        }
-        if not os.path.isdir('checkpoint'):
-            os.mkdir('checkpoint')
-        torch.save(b_state, './checkpoint/step1_bnet.pth')
-        s_state = {
-            'net': snet.state_dict(),
-            'acc': acc,
-            'epoch': epoch,
-        }
-        torch.save(s_state, './checkpoint/snet.pth')
-        step1_best_acc = acc
-
-# step2 - training
-def step2_train(epoch):
-    print('Step 2: Train - Epoch: {}'.format(epoch))
-    step2_bnet.train()
-    snet.eval()
-    pnet.train()
-
-    train_loss, correct, total = 0, 0, 0
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         inputs  = inputs.to(device, dtype=torch.float)
         targets = targets.to(device, dtype=torch.long)
-        #print(inputs.size(), targets.size()) # bs, 1, dim*128;  bs, 128
-        if inputs.size(2) != 128*3000:
-            idx    = list(range(0,6000*128,2))
-            inputs = inputs[:,:,idx]
-        step2_optimizer.zero_grad()
+        optimizer.zero_grad()
+        outputs = net(inputs)
 
-        bout  = step2_bnet(inputs) # bs, ch, dim
-        sout  = snet(bout)   # bs, seq_len, 2
 
-        # evaluate snet
-        slist = []
-        for i in range(targets.size(0)):
-            slist.append(convert_class_to_bin(targets[i]))
-        starget = torch.cat([x.unsqueeze(0) for x in slist])
-        starget = starget.to(device, dtype=torch.long)
-        sloss, scorr, stotal = gdl(sout, starget, sout.size(2))
-        print('snet acc: {}'.format(scorr/stotal))
-        # finish
-
-        bsout = torch.max(sout, dim=2)[1] # binary segment vector: bs, seq_len
-        pin   = seg_pool(bout, bsout) # bs, ch, dim(1/16)
-        pout  = pnet(pin) # bs, seq_len, 5
-
-        loss, correct_batch, total_batch = gdl(pout, targets, pout.size(2))
+        outputs = outputs.transpose(2, 1)
+        loss, correct_batch, total_batch = loss_criterion(outputs, targets, outputs.size(1))
         loss.backward()
-        step2_optimizer.step()
-
+        optimizer.step()
         train_loss += loss.item()
         correct    += correct_batch
         total      += total_batch
         progress_bar(batch_idx, len(train_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                          % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
-# step2 - validataion
-def step2_val(epoch):
-    print('Step 2: Valid - Epoch: {}'.format(epoch))
-    global step2_best_acc
-    step2_bnet.eval()
-    snet.eval()
-    pnet.eval()
-
-    val_loss, correct, total = 0, 0, 0
+# Validataion
+def val(epoch):
+    print('Val - Epoch: %d' % epoch)
+    global best_acc
+    net.eval()
+    val_loss = 0
+    correct = 0
+    total = 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(val_loader):
             inputs  = inputs.to(device, dtype=torch.float)
             targets = targets.to(device, dtype=torch.long)
-            if inputs.size(2) != 128*3000:
-                idx    = list(range(0,6000*128,2))
-                inputs = inputs[:,:,idx]
-            bout  = step2_bnet(inputs)
-            sout  = snet(bout)
-
-            # evaluate snet
-            slist = []
-            for i in range(targets.size(0)):
-                slist.append(convert_class_to_bin(targets[i]))
-            starget = torch.cat([x.unsqueeze(0) for x in slist])
-            starget = starget.to(device, dtype=torch.long)
-            sloss, scorr, stotal = gdl(sout, starget, sout.size(2))
-            torch.save(sout, 'sout.pt')
-            torch.save(starget, 'starget.pt')
-            print('snet acc: {}'.format(scorr/stotal))
-            # finish
-
-            bsout = torch.max(sout, dim=2)[1]
-            pin   = seg_pool(bout, bsout)
-            pout  = pnet(pin)
-            loss, correct_batch, total_batch = gdl(pout, targets, pout.size(2))
-
+            outputs = net(inputs)
+            outputs = outputs.transpose(2, 1)
+            loss, correct_batch, total_batch = loss_criterion(outputs, targets, outputs.size(1))
             correct  += correct_batch
             total    += total_batch
             val_loss += loss.item()
@@ -238,54 +98,85 @@ def step2_val(epoch):
 
     # Save checkpoint.
     acc = 100.*correct/total
-    if acc > step2_best_acc:
-        print('Saving step2_bnet, pnet ...')
+    if acc > best_acc:
+        print('Saving..')
         print(acc)
-        '''
-        b_state = {
-            'net': step2_bnet.state_dict(),
+        state = {
+            'net': net.state_dict(),
             'acc': acc,
             'epoch': epoch,
         }
-        torch.save(b_state, './checkpoint/step2_bnet.pth')
-        '''
-        p_state = {
-            'net': pnet.state_dict(),
+        if not os.path.isdir('checkpoint'):
+            os.mkdir('checkpoint')
+        torch.save(state, './checkpoint/stft_ckpt.pth')
+        best_acc = acc
+
+
+'''
+
+def train(epoch):
+    print('Train - Epoch: %d' % epoch)
+    net.train()
+    train_loss, correct, total = 0, 0, 0
+
+    for i in range(10):
+        loader = torch.load(path+loader_list[i])
+        for batch_idx, data in enumerate(loader, 0):
+            inputs, targets = data
+            inputs  = inputs.to(device, dtype=torch.float)
+            targets = targets.to(device, dtype=torch.long)
+            optimizer.zero_grad()
+            outputs = net(inputs)
+            outputs = outputs.transpose(2, 1)
+            loss, correct_batch, total_batch = loss_criterion(outputs, targets, outputs.size(1))
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+            correct    += correct_batch
+            total      += total_batch
+            progress_bar(batch_idx, len(loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                         % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
+
+def val(epoch):
+    print('Val - Epoch: %d' % epoch)
+    global best_acc
+    net.eval()
+    val_loss, correct, total = 0, 0, 0
+    with torch.no_grad():
+        for i in range(5):
+            loader  = torch.load(path+loader_list[i+10])
+            for batch_idx, data in enumerate(loader, 0):
+                inputs, targets = data
+                inputs  = inputs.to(device, dtype=torch.float)
+                targets = targets.to(device, dtype=torch.long)
+                outputs = net(inputs)
+                outputs = outputs.transpose(2, 1)
+                loss, correct_batch, total_batch = loss_criterion(outputs, targets, outputs.size(1))
+                correct  += correct_batch
+                total    += total_batch
+                val_loss += loss.item()
+                progress_bar(batch_idx, len(loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                         % (val_loss/(batch_idx+1), 100.*correct/total, correct, total))
+
+    # Save checkpoint.
+    acc = 100.*correct/total
+    if acc > best_acc:
+        print('Saving..')
+        print(acc)
+        state = {
+            'net': net.state_dict(),
             'acc': acc,
             'epoch': epoch,
         }
-        torch.save(p_state, './checkpoint/pnet.pth')
-        step2_best_acc = acc
+        if not os.path.isdir('checkpoint'):
+            os.mkdir('checkpoint')
+        torch.save(state, './checkpoint/stft_ckpt.pth')
+        best_acc = acc
 
-#optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
-iter_num    = args.iter_num
-step1_num   = args.step1_num
-step2_num   = args.step2_num
-train_stage = args.train_stage
+lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
+for epoch in range(start_epoch, start_epoch+1000):
+    train(epoch)
+    val(epoch)
+    lr_scheduler.step()
 
-for iter_ in range(iter_num):
-    print(iter_)
-    if '1' in str(train_stage):
-        # step1: bnet + snet
-        print('stage 1 ...')
-        step1_optimizer = optim.SGD(itertools.chain(step1_bnet.parameters(), snet.parameters()), lr=1e-4, momentum=0.9, weight_decay=5e-4)
-        lr_scheduler    = optim.lr_scheduler.StepLR(step1_optimizer, step_size=50, gamma=0.5)
-        for epoch in range(step1_start_epoch, step1_start_epoch + step1_num):
-            step1_train(epoch)
-            step1_val(epoch)
-            lr_scheduler.step()
-
-    if '2' in str(train_stage):
-        # step2: bnet + pnet -- keep snet's params fixed
-        print('stage 2 ...')
-        step2_bnet = step1_bnet
-
-        #step2_optimizer = optim.SGD(itertools.chain(step2_bnet.parameters(), pnet.parameters()), lr=1e-5, momentum=0.9, weight_decay=5e-4)
-        step2_optimizer = optim.SGD(pnet.parameters(), lr=1e-5, momentum=0.9, weight_decay=5e-4)
-        lr_scheduler    = optim.lr_scheduler.StepLR(step2_optimizer, step_size=50, gamma=0.5)
-        for epoch in range(step2_start_epoch, step2_start_epoch + step2_num):
-            step2_train(epoch)
-            step2_val(epoch)
-            lr_scheduler.step()
-
-    iter_ += 1
+print("best acc: ", best_acc)

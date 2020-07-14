@@ -183,9 +183,9 @@ def manually_pad(x, dim):
     return tmp
 
 if __name__ == '__main__':
-    ch_num = 1
+    ch_num = 3
     batch_size = 2
-    model = utime(ch=ch_num)
+    model = Utime(ch=ch_num)
     x = torch.rand(batch_size, ch_num, 3000*35)
     y = model(x)
     print(y.size())

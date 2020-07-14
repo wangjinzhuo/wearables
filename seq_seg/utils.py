@@ -108,57 +108,52 @@ def preprocessing(x):
     out = out.type(torch.float)
     return out
 
-def prepare_stft_loader(loader_dir):
-    loaders = []
-    for root, dirs, files in os.walk(loader_dir):
-        if files:
-            for file_ in files:
-                loaders.append(os.path.join(loader_dir, root, str(file_)))
-
-    for loader in loaders:
-        slash   = loader.split('/')
-        subdir  = '/'.join(str(x) for x in slash[:-1])+'/stft'
-        if not os.path.isdir(subdir):
-            os.mkdir(subdir)
-
-        df      = torch.load(loader)
-        x, y    = df.dataset.tensors[0], df.dataset.tensors[1]
-        idx     = list(range(0, 6000, 2))
-        x       = x[:, :, idx]
-        x       = preprocessing(x)
-        dataset = TensorDataset(x, y)
-        loader_ = DataLoader(dataset, batch_size=df.batch_size)
-
-        torch.save(loader_, subdir+'/'+slash[-1])
-
-def combine_loader(loader_list):
+def combine_loader(path, loader_list):
     xlist, ylist = [], []
-    for loader in loader_list:
+    for loader_ in loader_list:
+        loader = torch.load(os.path.join(path,loader_))
         x, y = loader.dataset.tensors[0], loader.dataset.tensors[1]
         xlist.append(x), ylist.append(y)
     x, y    = torch.cat(xlist, 0), torch.cat(ylist, 0)
     dataset = TensorDataset(x, y)
-    loader  = DataLoader(dataset, batch_size=loader_list[0].batch_size)
+    loader  = DataLoader(dataset, batch_size=64)
 
     return loader
 
-def make_sleep_edf_dataloader(dataset_dir, batch_size):
-    files = os.listdir(dataset_dir)
-    x, y = [], []
-    for f in files:
-        df = np.load(os.path.join(dataset_dir, f))
-        data = df['x']
-        data = data.transpose(0,2,1)
-        label = df['y']
-        x.append(data)
-        y.append(label)
+def prepare_stft_loader(seq_loader_dir, stft_loader_dir):
+    # in each loader, x is [#n, seq_len, ch, 3000]
+    save = os.path.join(seq_loader_dir, stft_loader_dir)
+    if not os.path.isdir(save):
+        os.mkdir(save)
+    loaders = os.listdir(seq_loader_dir)
+    for loader in loaders:
+        print(loader)
+        if not '.pt' in loader:
+            continue
+        df      = torch.load(os.path.join(seq_loader_dir, loader))
+        x, y    = df.dataset.tensors[0], df.dataset.tensors[1]
+        x       = preprocessing(x)
+        dataset = TensorDataset(x, y)
+        loader_ = DataLoader(dataset, batch_size=df.batch_size)
 
-    x, y = tuple(x), tuple(y)
-    x, y = np.concatenate(x), np.concatenate(y)
-    torch_x, torch_y = torch.from_numpy(x), torch.from_numpy(y)
-    dataset = TensorDataset(torch_x, torch_y)
-    dataloader = DataLoader(dataset, batch_size=batch_size)
-    return dataloader
+        torch.save(loader_, save+'/'+loader)
+
+def make_seq_loader(loader, seq_len, stride):
+    # input : loader of size [#n, ch, #dim], [#n]
+    # return: loader of size [#n, seq_len, #dim], [#n]
+
+    x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
+    dim    = x.shape[-1]
+    idx    = gen_seq(x.shape[0], seq_len, stride)
+    xx, yy = [x[i:i+seq_len, :, :] for i in idx], [y[i:i+seq_len] for i in idx]
+    xx     = [x.reshape(-1, x.shape[0]*x.shape[2]) for x in xx]
+
+    xx, yy = [x.unsqueeze(0) for x in xx], [y.unsqueeze(0) for y in yy]
+    xx, yy = torch.cat(xx), torch.cat(yy)
+
+    dataset= TensorDataset(xx, yy)
+    loader = DataLoader(dataset, batch_size=loader.batch_size)
+    return loader
 
 def seq_cel(pred, gt, class_num):
     # seq cross entropy loss
@@ -185,62 +180,12 @@ def gdl(pred, gt, class_num):
 
     return loss, corr, total
 
-def make_seq_stft_loader(loader, seq_len, stride):
-    # input : loader of size [#n, 1, 29, 129], [#n]
-    # return: loader of size [#n, seq_len, 29, 129], [#n]
-
-    x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
-    dim    = x.shape[-1]
-    idx    = gen_seq(x.shape[0], seq_len, stride)
-    xx, yy = [x[i:i+seq_len, :, :, :] for i in idx], [y[i:i+seq_len] for i in idx]
-    xx     = [x.reshape(1, seq_len, x.shape[2], x.shape[3]) for x in xx]
-    yy     = [y.unsqueeze(0) for y in yy]
-
-    xx, yy = torch.cat(xx), torch.cat(yy)
-    dataset= TensorDataset(xx, yy)
-    loader = DataLoader(dataset, batch_size=loader.batch_size)
-    return loader
-
-def make_seq_loader(loader, seq_len, stride):
-    # input : loader of size [#n, 1, #dim], [#n]
-    # return: loader of size [#n, seq_len, #dim], [#n]
-
-    x, y   = loader.dataset.tensors[0], loader.dataset.tensors[1]
-    dim    = x.shape[-1]
-    idx    = gen_seq(x.shape[0], seq_len, stride)
-    xx, yy = [x[i:i+seq_len, :, :] for i in idx], [y[i:i+seq_len] for i in idx]
-    xx     = [x.reshape(-1, x.shape[0]*x.shape[2]) for x in xx]
-    xx, yy = [x.unsqueeze(0) for x in xx], [y.unsqueeze(0) for y in yy]
-    xx, yy = torch.cat(xx), torch.cat(yy)
-    xx     = torch.reshape(xx, [-1, seq_len, dim]) # [#n, seq_len, dim]
-    dataset= TensorDataset(xx, yy)
-    loader = DataLoader(dataset, batch_size=loader.batch_size)
-    return loader
-
 def gen_seq(n, seq_len, stride):
     res = []
     for i in range(0, n, stride):
         if i + seq_len <= n:
             res.append(i)
     return res
-
-def make_dataloader(dataset_dir, files, channel, batch_size, shuffle):
-    x, y = [], []
-    for f in files:
-        matf = os.path.join(dataset_dir, f)
-        mat  = loadmat(matf)
-        data = mat['data'][:,:,channel]
-        data = data.reshape(data.shape[0], 1, data.shape[1])
-        #print(data.shape)
-        label = mat['labels']
-        x.append(data)
-        y.append(label)
-    x, y = tuple(x), tuple(y)
-    x, y = np.vstack(x), np.vstack(y)
-    torch_x, torch_y = torch.from_numpy(x), torch.from_numpy(y)
-    dataset = TensorDataset(torch_x, torch_y)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-    return dataloader
 
 def get_mean_and_std(dataset):
     '''Compute the mean and std value of dataset.'''

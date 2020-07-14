@@ -1,42 +1,124 @@
-import os
 import torch
-import numpy as np
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
+import torch.optim as optim
+import torch.nn.functional as F
 
-from seqsleepnet import *
+import os
+import time
+import math
+import random
+import argparse
+
 from utils import *
+from seqsleepnet import *
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-test_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_1.pt')
-net = SeqSleepNet(seq_len=20, class_num=5)
+parser = argparse.ArgumentParser(description='prepare args')
+parser.add_argument("--resume", "-r", action="store_true", help="resume from checkpoint")
+parser.add_argument("--loss", default='ce')
+args = parser.parse_args()
+
+device      = "cuda" if torch.cuda.is_available() else "cpu"
+best_acc    = 0 # best val accuracy
+start_epoch = 0 # start from epoch 0 or last checkpoint epoch
+
+loss_criterion = seq_cel if args.loss == 'ce' else gdl
+
+print("preparing loader ...")
+train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/stft/ss_1.pt')
+val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/stft/ss_2.pt')
+train_loader = make_seq_stft_loader(train_loader, seq_len=20, stride=5)
+val_loader   = make_seq_stft_loader(val_loader, seq_len=20, stride=5)
+
+tr_y, val_y  = train_loader.dataset.tensors[1], val_loader.dataset.tensors[1]
+print('training sample: ', tr_y.size(0))
+print('valid sample: ', val_y.size(0))
+
+print("finish ...")
+
+filterbanks  = torch.from_numpy(lin_tri_filter_shape(32, 256, 100, 0, 50)).to(torch.float).cuda()
+net = SeqSleepNet(filterbanks=filterbanks, ch_num=1, seq_len=20, class_num=5)
 net = net.to(device)
-if device == 'cuda':
+if device == "cuda":
     net = nn.DataParallel(net)
     cudnn.benchmark = True
 
-# load checkpoint
-assert os.path.isfile('checkpoint/ckpt.pth'), 'no checkpoint file found, please download it at: and save it at checkpoint directory'
-checkpoint = torch.load('checkpoint/ckpt.pth')
-net.load_state_dict(checkpoint['net'])
-print('best acc: ', checkpoint['acc'])
+if args.resume:
+    # load checkpoint
+    print("resuming from checkpoint")
+    assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found"
+    checkpoint = torch.load("./checkpoint/stft_ckpt.pth")
+    net.load_state_dict(checkpoint["net"])
+    best_acc = checkpoint["acc"]
+    start_epoch = checkpoint["epoch"]
+    print("best acc: ", best_acc)
 
-def test():
+optimizer = optim.Adam(net.parameters(), lr=1e-5, betas=(0.9, 0.999), eps=1e-8)
+
+# Training
+def train(epoch):
+    print('Train - Epoch: %d' % epoch)
+    net.train()
+    train_loss = 0
+    correct = 0
+    total = 0
+
+    for batch_idx, (inputs, targets) in enumerate(train_loader):
+        inputs  = inputs.to(device, dtype=torch.float)
+        targets = targets.to(device, dtype=torch.long)
+        optimizer.zero_grad()
+        outputs = net(inputs)
+
+        outputs = outputs.transpose(2, 1)
+        loss, correct_batch, total_batch = loss_criterion(outputs, targets, outputs.size(1))
+        loss.backward()
+        optimizer.step()
+        train_loss += loss.item()
+        correct    += correct_batch
+        total      += total_batch
+        progress_bar(batch_idx, len(train_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                         % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
+
+# Validataion
+def val(epoch):
+    print('Val - Epoch: %d' % epoch)
+    global best_acc
     net.eval()
-    pred, gt = [], []
-    for idx, (inputs, targets) in enumerate(test_loader):
-        inputs = preprocessing(inputs)
-        inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long)
-        outputs = net(inputs) # outputs bs, 5; targets bs, 5
-        outputs = outputs.transpose(0, 2, 1) # bs, seq, class_num --> bs, class_num, seq_len
-        outputs, targets = outputs.max(1)[1], targets.max(1)[1]
-        pred.append(outputs.cpu())
-        gt.append(targets.cpu())
+    val_loss = 0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(val_loader):
+            inputs  = inputs.to(device, dtype=torch.float)
+            targets = targets.to(device, dtype=torch.long)
+            outputs = net(inputs)
+            outputs = outputs.transpose(2, 1)
+            loss, correct_batch, total_batch = loss_criterion(outputs, targets, outputs.size(1))
+            correct  += correct_batch
+            total    += total_batch
+            val_loss += loss.item()
+            progress_bar(batch_idx, len(val_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                         % (val_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
-    pred, gt = np.concatenate(pred), np.concatenate(gt)
-    pred, gt = pred.reshape(-1), gt.reshape(-1)
-    print('acc: ', (pred == gt).sum() / len(gt))
-    # draw cm
-    plot_confusion_matrix_from_data(gt, pred, [], True, 'Oranges', '.2f', 0.5, False, 2, 'y')
+    # Save checkpoint.
+    acc = 100.*correct/total
+    if acc > best_acc:
+        print('Saving..')
+        print(acc)
+        state = {
+            'net': net.state_dict(),
+            'acc': acc,
+            'epoch': epoch,
+        }
+        if not os.path.isdir('checkpoint'):
+            os.mkdir('checkpoint')
+        torch.save(state, './checkpoint/stft_ckpt.pth')
+        best_acc = acc
 
-test()
+lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
+for epoch in range(start_epoch, start_epoch+1000):
+    train(epoch)
+    val(epoch)
+    lr_scheduler.step()
+
+print("best acc: ", best_acc)

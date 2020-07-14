@@ -25,23 +25,8 @@ device      = "cuda" if torch.cuda.is_available() else "cpu"
 best_acc    = 0 # best val accuracy
 start_epoch = 0 # start from epoch 0 or last checkpoint epoch
 
-print("preparing loader ...")
-train_loader = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_1.pt')
-val_loader   = torch.load('/media/jinzhuo/wjz/Data/loader/mass/ch_0/ss_2.pt')
-train_loader = make_seq_loader(train_loader, seq_len=35, stride=20)
-val_loader   = make_seq_loader(val_loader, seq_len=35, stride=20)
-
-tr_y, val_y  = train_loader.dataset.tensors[1], val_loader.dataset.tensors[1]
-print('training sample: ', tr_y.size(0))
-print('valid sample: ', val_y.size(0))
-
-print("finish ...")
-
-net = Utime(ch=1)
+net = Utime(ch=4)
 net = net.to(device)
-if device == "cuda":
-    net = nn.DataParallel(net)
-    cudnn.benchmark = True
 
 if args.resume:
     # load checkpoint
@@ -56,68 +41,101 @@ if args.resume:
 optimizer = optim.SGD(net.parameters(), lr=1e-3, momentum=0.9, weight_decay=5e-4)
 #optimizer = optim.Adam(net.parameters(), lr=5e-6, betas=(0.9, 0.999), eps=1e-8)
 
+tr_path   = '/media/jinzhuo/wjz/Data/Navin_RBD/tr'
+val_path  = '/media/jinzhuo/wjz/Data/Navin_RBD/val'
+
 # Training
 def train(epoch):
-    print('Train - Epoch: %d' % epoch)
+    print('Train - epoch: %d' % epoch)
     net.train()
-    train_loss = 0
-    correct = 0
-    total = 0
+    fs = os.listdir(tr_path)
+    for f in fs:
+        print(f)
+        mat = loadmat(os.path.join(tr_path, f))
+        x, y = mat['data'], mat['labels']
+        x    = x.transpose(0,2,1)
+        x    = x[:,:,0:-1:2]
+        x    = x[:,0:4,:]
+        x, y = torch.from_numpy(x), torch.from_numpy(y)
+        y    = y.max(1)[1]
+        idx  = gen_seq(x.shape[0], 35, 1)
+        batch_idx = list(range(0, len(idx), 32))
+        for b in batch_idx[:-1]:
+            correct, total = 0, 0
+            xlist, ylist = [], []
+            for i in range(b, b+32):
+                tmpx, tmpy = x[i:i+35, :, :], y[i:i+35]
+                tmpx       = tmpx.transpose(0,1)
+                tmpx       = tmpx.reshape(4, 3000*35)
+                tmpx, tmpy = tmpx.unsqueeze(0), tmpy.unsqueeze(0)
+                xlist.append(tmpx), ylist.append(tmpy)
+            inputs, targets = torch.cat(xlist), torch.cat(ylist)
+            inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long)
+            outputs = net(inputs)
 
-    for batch_idx, (inputs, targets) in enumerate(train_loader):
-        inputs  = inputs.to(device, dtype=torch.float)
-        targets = targets.to(device, dtype=torch.long)
-        if inputs.size(2) != 35*3000:
-            idx    = list(range(0,6000*35,2))
-            inputs = inputs[:,:,idx]
-        optimizer.zero_grad()
-        outputs = net(inputs)
-        loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
-        loss.backward()
-        optimizer.step()
-        train_loss += loss.item()
-        correct    += correct_batch
-        total      += total_batch
-        progress_bar(batch_idx, len(train_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                         % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
+            optimizer.zero_grad()
+            loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
+            loss.backward()
+            optimizer.step()
+            assert correct_batch <= total_batch, print('error ... c: %d, t: %d' % (correct_batch, total_batch))
+            correct    += correct_batch
+            total      += total_batch
+            print(int(b/32), ' | ', '{:.4f}'.format(loss.item()), ' | ', '{:.2f}'.format(100.*correct/total), ' | ', correct, ' | ', total)
 
 # Validataion
 def val(epoch):
     print('Val - Epoch: %d' % epoch)
     global best_acc
     net.eval()
-    val_loss = 0
-    correct = 0
-    total = 0
+    fs = os.listdir(val_path)
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(val_loader):
-            inputs  = inputs.to(device, dtype=torch.float)
-            targets = targets.to(device, dtype=torch.long)
-            if inputs.size(2) != 35*3000:
-                idx    = list(range(0,6000*35,2))
-                inputs = inputs[:,:,idx]
-            outputs = net(inputs)
-            loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
-            correct  += correct_batch
-            total    += total_batch
-            val_loss += loss.item()
-            progress_bar(batch_idx, len(val_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                         % (val_loss/(batch_idx+1), 100.*correct/total, correct, total))
+        for f in fs:
+            print(f)
+            mat = loadmat(os.path.join(val_path, f))
+            x, y = mat['data'], mat['labels']
+            x    = x.transpose(0,2,1)
+            x    = x[:,:,0:-1:2]
+            x    = x[:,0:4,:]
+            x, y = torch.from_numpy(x), torch.from_numpy(y)
+            y    = y.max(1)[1]
+            idx  = gen_seq(x.shape[0], 35, 1)
+            batch_idx = list(range(0, len(idx), 32))
+            for b in batch_idx[:-1]:
+                correct, total = 0, 0
+                xlist, ylist = [], []
+                for i in range(b, b+32):
+                    tmpx, tmpy = x[i:i+35, :, :], y[i:i+35]
+                    tmpx       = tmpx.transpose(0,1)
+                    tmpx       = tmpx.reshape(4, 3000*35)
+                    tmpx, tmpy = tmpx.unsqueeze(0), tmpy.unsqueeze(0)
+                    xlist.append(tmpx), ylist.append(tmpy)
+                inputs, targets = torch.cat(xlist), torch.cat(ylist)
+                inputs, targets = inputs.to(device, dtype=torch.float), targets.to(device, dtype=torch.long)
+                outputs = net(inputs)
 
-    # Save checkpoint.
-    acc = 100.*correct/total
-    if acc > best_acc:
-        print('Saving..')
-        print(acc)
-        state = {
-            'net': net.state_dict(),
-            'acc': acc,
-            'epoch': epoch,
-        }
-        if not os.path.isdir('checkpoint'):
-            os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt.pth')
-        best_acc = acc
+                optimizer.zero_grad()
+                loss, correct_batch, total_batch = gdl(outputs, targets, outputs.size(1))
+                correct  += correct_batch
+                total    += total_batch
+                assert correct_batch <= total_batch, print('error ... c: %d, t: %d' % (correct_batch, total_batch))
+                print(int(b/32), ' | ', '{:.4f}'.format(loss.item()), ' | ', '{:.2f}'.format(100.*correct/total), ' | ', correct, ' | ', total)
+                #progress_bar(idx, len(loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                #         % (val_loss/(idx+1), 100.*correct/total, correct, total))
+
+                # Save checkpoint.
+                acc = 100.*correct/total
+                if acc > best_acc:
+                    print('Saving..')
+                    print(acc)
+                state = {
+                    'net': net.state_dict(),
+                    'acc': acc,
+                    'epoch': epoch,
+                }
+                if not os.path.isdir('checkpoint'):
+                    os.mkdir('checkpoint')
+                torch.save(state, './checkpoint/stft_ckpt.pth')
+                best_acc = acc
 
 lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
 for epoch in range(start_epoch, start_epoch+400):
